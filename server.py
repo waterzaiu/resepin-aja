@@ -123,7 +123,7 @@ Aturan WAJIB:
 3. Pisahkan bahan menjadi dua kelompok:
    - "terdeteksi": bahan yang benar-benar terlihat di gambar dan dipakai di resep.
    - "kurang": bahan dapur umum (pantry staples) yang TIDAK terlihat di gambar tapi biasanya dibutuhkan untuk masakan ini, contoh: minyak goreng, garam, gula, bawang putih, bawang merah, cabai, kecap manis, saus tiram, terasi, kemiri, lengkuas, daun salam, daun jeruk, air, kaldu bubuk. Hanya sebut yang benar-benar relevan untuk resep ini (maksimal 6 item).
-4. Langkah memasak: 4-7 langkah singkat, jelas, urutan logis, bahasa sehari-hari Indonesia.
+4. Langkah memasak: 4-7 langkah singkat, jelas, urutan logis, bahasa sehari-hari Indonesia. Setiap langkah WAJIB menyebut bahan/spesifik kuantitas kasar (mis. "2 siung bawang putih, cincang") dan tindakan konkret (panaskan, tumis, rebus, aduk) serta perkiraan durasi ("±3 menit") bila relevan. Hindari langkah terlalu umum seperti "masak sampai matang" tanpa detail.
 5. Estimasi waktu masak (menit) dan porsi.
 
 Format output WAJIB JSON murni (TIDAK boleh ada teks di luar JSON, TIDAK boleh markdown code fence):
@@ -570,10 +570,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             detected = recipe.get("bahanTerdeteksi", [])
             query = ingredient_query(detected)
             cards = mixed_recipes(query, search_cookpad, limit=18) if query else []
-            if cards:
-                recipe["menuAlternatif"] = [dict(card, recommended=i == 0) for i, card in enumerate(cards)]
-            else:
-                recipe["menuAlternatif"] = recommended_cards(detected) or lookup_recipe_cards(recipe.get("menuAlternatif", []), detected)
+            # Filter relevansi: hanya kartu yang judulnya cocok dengan bahan
+            # terdeteksi. Jangan pernah memberi label recommended pada hasil acak.
+            alt = rank_cards(cards, detected)
+            if not alt:
+                alt = recommended_cards(detected) or lookup_recipe_cards(recipe.get("menuAlternatif", []), detected)
+            recipe["menuAlternatif"] = alt
             self.send_json({
                 "recipe": recipe,
                 "provider": provider_used,
@@ -718,19 +720,114 @@ def search_cookpad(query, limit=12):
         return []
 
 
-def ingredient_query(ingredients):
+# Alias normalisasi bahan: kata Indonesia -> kata kunci pencarian (Inggris untuk
+# sumber internasional, Indonesia tetap dipertahankan untuk Cookpad/detik).
+INGREDIENT_ALIASES = {
+    "telur": "egg", "ayam": "chicken", "kentang": "potato", "nasi": "rice",
+    "mie": "noodles", "mi": "noodles", "indomie": "noodles", "ikan": "fish",
+    "udang": "shrimp", "daging": "beef", "tomat": "tomato", "jamur": "mushroom",
+    "wortel": "carrot", "bayam": "spinach", "tahu": "tofu", "tempe": "tempeh",
+    "kacang": "beans", "pisang": "banana", "keju": "cheese", "roti": "bread",
+    "sapi": "beef", "bawang": "onion", "cabai": "chili", "cabe": "chili",
+    "santan": "coconut", "kelapa": "coconut", "jagung": "corn", "ubi": "potato",
+    "singkong": "cassava", "terong": "eggplant", "brokoli": "broccoli",
+    "kol": "cabbage", "kubis": "cabbage", "sawi": "mustard", "kangkung": "spinach",
+    "buncis": "beans", "lada": "pepper", "merica": "pepper", "gula": "sugar",
+    "garam": "salt", "minyak": "oil", "kecap": "soy", "tepung": "flour",
+    "susu": "milk", "mentega": "butter", "kuning": "egg", "putih": "egg",
+}
+
+# Kata non-bahan yang sering muncul di deskripsi AI dan harus diabaikan.
+_NON_INGREDIENT = {
+    "rasa", "goreng", "segar", "bungkus", "buah", "potong", "merk", "kemasan",
+    "bahan", "dapur", "sisa", "seperempat", "setengah", "iris", "cincang",
+}
+
+
+def normalize_ingredient(item):
+    """Normalize satu bahan jadi kata kunci kanonik (bahasa Inggris bila dikenal)."""
     import re
+    text = str(item).lower()
+    text = re.sub(r"[^a-z\s]", " ", text)
+    keywords = []
+    for word in text.split():
+        if word in _NON_INGREDIENT:
+            continue
+        if len(word) <= 2 and word not in ("mi", "ubi"):
+            continue
+        keywords.append(INGREDIENT_ALIASES.get(word, word))
+    return keywords
+
+
+def ingredient_query(ingredients):
+    """Bangun query pencarian dari bahan terdeteksi, dinormalisasi via alias.
+
+    Tidak lagi berhenti setelah 4 kata — semua bahan dipertimbangkan supaya
+    pencarian resep benar-benar relevan, bukan sekadar kata awal acak.
+    """
     words = []
     for item in ingredients if isinstance(ingredients, list) else []:
-        text = str(item).lower()
-        text = re.sub(r"\b(rasa|goreng|segar|bungkus|buah|potong|merk|kemasan)\b", " ", text)
-        text = re.sub(r"[^a-z\s]", " ", text)
-        for word in text.split():
-            if len(word) > 2 and word not in words:
+        for word in normalize_ingredient(item):
+            if word not in words:
                 words.append(word)
-        if len(words) >= 4:
-            break
-    return " ".join(words[:4])
+    return " ".join(words[:6])
+
+
+def _title_matches(title, keywords):
+    """Hitung keyword bahan yang muncul di judul resep (bukti relevansi)."""
+    text = str(title).lower()
+    return [k for k in keywords if k and k in text]
+
+
+def score_card(card, keywords):
+    """Skor relevansi sebuah kartu resep terhadap keyword bahan.
+
+    Mengembalikan tuple (score, matched_reason) — reason berupa string bukti
+    kecocokan judul, bukan klaim ketersediaan bahan lengkap.
+    """
+    if not keywords:
+        return 0, None
+    title = str(card.get("nama", "")).lower()
+    matched = _title_matches(title, keywords)
+    if not matched:
+        return 0, None
+    # Skor berdasarkan jumlah keyword unik yang cocok di judul.
+    return len(matched), ", ".join(dict.fromkeys(matched))
+
+
+def rank_cards(cards, ingredients):
+    """Filter & urutkan kartu resep menurut kecocokan judul dengan bahan.
+
+    Kartu yang tidak cocok judulnya dengan bahan TIDAK dikembalikan (bukan
+    hasil acak). Setiap kartu diberi `reason` (bukti judul) dan `recommended`
+    hanya untuk kartu relevansi tertinggi. Keyword memuat kata asli (Indonesia)
+    sekaligus alias Inggris supaya judul lokal tetap cocok.
+    """
+    keywords = []
+    for item in ingredients if isinstance(ingredients, list) else []:
+        raw = str(item).lower()
+        for word in raw.split():
+            if word in _NON_INGREDIENT:
+                continue
+            if len(word) <= 2 and word not in ("mi", "ubi"):
+                continue
+            keywords.append(word)  # kata asli
+            alias = INGREDIENT_ALIASES.get(word)
+            if alias:
+                keywords.append(alias)
+    keywords = list(dict.fromkeys(keywords))
+
+    scored = []
+    for card in cards or []:
+        score, reason = score_card(card, keywords)
+        if score > 0 and reason:
+            scored.append((score, card, reason))
+    scored.sort(key=lambda t: t[0], reverse=True)
+
+    ranked = []
+    for i, (score, card, reason) in enumerate(scored):
+        ranked.append(dict(card, reason=reason, recommended=(i == 0)))
+    return ranked
 
 
 def recommended_cards(ingredients):
@@ -742,7 +839,11 @@ def recommended_cards(ingredients):
 
 
 def lookup_recipe_cards(names, ingredients=()):
-    """Cari halaman resep sungguhan beserta thumbnail lewat indeks resep TheMealDB."""
+    """Cari halaman resep sungguhan beserta thumbnail lewat indeks resep TheMealDB.
+
+    Hasil difilter agar hanya menampilkan resep yang judulnya cocok dengan bahan
+    terdeteksi — tidak pernah menampilkan menu acak yang tak berhubungan.
+    """
     import urllib.parse
 
     names = names if isinstance(names, list) else []
@@ -786,8 +887,14 @@ def lookup_recipe_cards(names, ingredients=()):
                 "url": f"https://www.themealdb.com/meal/{meal['idMeal']}",
             })
             if len(cards) == 6:
-                return cards
-    return cards
+                break
+
+    # Filter relevansi: hanya kartu yang judulnya cocok dengan keyword bahan.
+    ranked = rank_cards(cards, ingredients)
+    if ranked:
+        return ranked
+    # Jika tidak ada yang cocok judulnya, jangan kembalikan hasil acak.
+    return []
 
 
 def parse_recipe(raw):

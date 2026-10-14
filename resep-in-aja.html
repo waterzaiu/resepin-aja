@@ -631,9 +631,17 @@ Scan bahan yang kamu punya
           <img src="${escapeHtml(c.thumbnail)}" alt="Foto ${escapeHtml(c.nama)}" loading="lazy" />
           ${c.recommended ? '<b class="recommend-tag">⭐ Recommended</b>' : ''}
           <span>${escapeHtml(c.nama)} ↗</span>
-          <small>${escapeHtml(c.source || 'TheMealDB')}</small>
+          ${c.reason ? `<small>Relevan: ${escapeHtml(c.reason)}</small>` : `<small>${escapeHtml(c.source || 'TheMealDB')}</small>`}
         </a>
       `).join('');
+    }
+
+    function youtubeSearchLink(dishName) {
+      // Tautan pencarian YouTube (bukan URL video yang dikarang). Hasil pencarian
+      // bisa berubah; hanya nama masakan yang di-encode ke query.
+      const q = String(dishName || '').trim();
+      if (!q) return '';
+      return 'https://www.youtube.com/results?search_query=' + encodeURIComponent('resep ' + q);
     }
 
     async function loadGallery() {
@@ -898,6 +906,15 @@ Scan bahan yang kamu punya
                   ${Number(r.porsi) || 2} porsi
                 </span>
               </div>
+              ${youtubeSearchLink(r.namaMasakan) ? `
+                <a class="btn btn-outline" href="${escapeHtml(youtubeSearchLink(r.namaMasakan))}" target="_blank" rel="noopener noreferrer" style="margin-top: 12px; color: white; border-color: rgba(255,255,255,0.4); background: rgba(255,255,255,0.12);">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"/>
+                    <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/>
+                  </svg>
+                  Tutorial Video (YouTube)
+                </a>
+              ` : ''}
               ${providerBadge ? `<div class="provider-line">${providerBadge}</div>` : ''}
             </div>
           </div>
@@ -951,6 +968,15 @@ Scan bahan yang kamu punya
                     </li>
                   `).join('')}
                 </ul>
+                <button class="btn btn-outline btn-full" id="astroCheckBtn" type="button" style="margin-top: 12px;">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="9" cy="21" r="1"/>
+                    <circle cx="20" cy="21" r="1"/>
+                    <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+                  </svg>
+                  Terdapat di Astro $$?
+                </button>
+                <p class="missing-help" id="astroResult" style="margin-top: 8px; display: none;"></p>
               </div>
             </div>
           ` : ''}
@@ -981,11 +1007,18 @@ Scan bahan yang kamu punya
             <div class="card">
               <div class="card-header"><h3 class="section-title">Jelajahi Resep Lain</h3></div>
               <div class="card-body">
-                <p class="missing-help">Resep dari Cookpad/TheMealDB berdasarkan bahan yang terdeteksi. Cek bahan tambahan di halaman tujuan—belum tentu semuanya tersedia di fotomu.</p>
+                <p class="missing-help">Resep dari Cookpad/TheMealDB yang judulnya cocok dengan bahan terdeteksi. Cek bahan tambahan di halaman tujuan—belum tentu semuanya tersedia di fotomu.</p>
                 <div class="recipe-grid">${recipeTiles(r.menuAlternatif)}</div>
               </div>
             </div>
-          ` : ''}
+          ` : `
+            <div class="card">
+              <div class="card-header"><h3 class="section-title">Jelajahi Resep Lain</h3></div>
+              <div class="card-body">
+                <p class="missing-help">Belum ada resep tambahan yang cocok dengan bahan terdeteksi. Coba scan ulang dengan bahan yang lebih jelas, atau jelajahi inspirasi di halaman utama.</p>
+              </div>
+            </div>
+          `}
 
           <div class="btn-stack" style="margin-top: 16px;">
             <button class="btn btn-outline btn-full" id="newRecipeBtn">
@@ -1006,6 +1039,24 @@ Scan bahan yang kamu punya
           clearImage();
           resultContainer.innerHTML = '';
           document.getElementById('inputCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      }
+
+      const astroBtn = document.getElementById('astroCheckBtn');
+      if (astroBtn) {
+        astroBtn.addEventListener('click', () => {
+          // Jujur: tidak ada API stok/harga Astro yang terhubung. Arahkan user
+          // untuk cek sendiri di aplikasi/situs Astro, tanpa mengarang ketersediaan
+          // atau harga.
+          const result = document.getElementById('astroResult');
+          if (!result) return;
+          const names = (r.bahanKurang || []).map(b => String(b).trim()).filter(Boolean);
+          const list = names.slice(0, 6).join(', ') || 'bahan yang kurang';
+          result.textContent =
+            'Kami tidak terhubung ke data stok/harga Astro, jadi tidak bisa memastikan ' +
+            'ketersediaan atau harga. Silakan cek "' + list + '" langsung di aplikasi atau ' +
+            'situs Astro terdekat.';
+          result.style.display = 'block';
         });
       }
       resultContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
