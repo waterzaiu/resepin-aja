@@ -1,0 +1,6 @@
+.gemini-key
+.api
+.env
+.api-keys.enc.json
+.api-keys.enc.json.tmp
+__pycache__/

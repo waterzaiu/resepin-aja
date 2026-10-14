@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Resep in aja — Zero-Waste Fridge AI</title>
+  <meta name="description" content="Ubah sisa bahan makanan jadi resep masakan Indonesia. Purwarupa hackathon Sustainability." />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    :root {
+      --bg: #fff8ed;
+      --fg: #431407;
+      --muted: #92400e;
+      --primary: #c2410c;
+      --primary-hover: #9a3412;
+      --green: #15803d;
+      --green-bg: #f0fdf4;
+      --green-border: #86efac;
+      --amber: #b45309;
+      --amber-bg: #fffbeb;
+      --amber-border: #fcd34d;
+      --red: #b91c1c;
+      --red-bg: #fef2f2;
+      --red-border: #fecaca;
+      --card: #ffffff;
+      --border: #fde68a;
+      --shadow: 0 1px 3px rgba(67, 20, 7, 0.08), 0 1px 2px rgba(67, 20, 7, 0.04);
+    }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(to bottom, #fff8ed, #fff7ed, #fff8ed);
+      color: var(--fg);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    header {
+      position: sticky; top: 0; z-index: 30;
+      background: rgba(255, 248, 237, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(253, 230, 138, 0.6);
+    }
+    .header-inner {
+      max-width: 768px; margin: 0 auto;
+      padding: 12px 16px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .logo { display: flex; align-items: center; gap: 8px; }
+    .logo-icon {
+      width: 36px; height: 36px;
+      background: var(--primary); border-radius: 12px;
+      display: flex; align-items: center; justify-content: center; color: white;
+    }
+    .logo-icon svg { width: 20px; height: 20px; }
+    .logo-text { line-height: 1.1; }
+    .logo-title { font-size: 16px; font-weight: 800; color: #7c2d12; }
+    .logo-sub { font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--primary); }
+    .badge-sus {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; font-weight: 600; padding: 4px 10px;
+      border-radius: 999px; background: #dcfce7; color: #14532d; border: 1px solid #86efac;
+    }
+    .badge-sus svg { width: 12px; height: 12px; }
+
+    main { max-width: 768px; width: 100%; margin: 0 auto; padding: 24px 16px; flex: 1; }
+
+    .hero { text-align: center; margin-bottom: 24px; }
+    .hero-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 12px; background: #ffedd5; color: #9a3412;
+      border-radius: 999px; font-size: 12px; font-weight: 500; margin-bottom: 12px;
+    }
+    .hero-chip svg { width: 14px; height: 14px; }
+    .hero h1 {
+      font-size: 30px; line-height: 1.15; font-weight: 800;
+      color: #431407; margin: 0 0 12px; letter-spacing: -0.02em;
+    }
+    .hero h1 .accent { color: var(--primary); }
+    .hero p { font-size: 15px; line-height: 1.6; color: var(--muted); max-width: 540px; margin: 0 auto; }
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 24px; }
+    .stat { background: rgba(255, 255, 255, 0.7); border: 1px solid var(--border); border-radius: 12px; padding: 12px; text-align: center; }
+    .stat-icon {
+      width: 32px; height: 32px; margin: 0 auto 6px;
+      background: #ffedd5; color: var(--primary); border-radius: 999px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .stat-icon svg { width: 16px; height: 16px; }
+    .stat-label { font-size: 11px; font-weight: 500; color: var(--muted); }
+
+    .card {
+      background: rgba(255, 255, 255, 0.95); border: 1px solid var(--border);
+      border-radius: 16px; box-shadow: var(--shadow); margin-bottom: 16px; overflow: hidden;
+    }
+    .card-header { padding: 16px 20px 12px; border-bottom: 1px solid #fef3c7; }
+    .card-title { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; color: #7c2d12; margin: 0; }
+    .card-title svg { width: 16px; height: 16px; color: var(--primary); }
+    .card-body { padding: 16px 20px 20px; }
+
+    .preview-area {
+      position: relative; width: 100%; aspect-ratio: 16 / 9;
+      background: rgba(255, 251, 235, 0.5); border: 2px dashed #fcd34d;
+      border-radius: 12px; overflow: hidden;
+      display: flex; align-items: center; justify-content: center; margin-bottom: 16px;
+    }
+    .preview-area img, .preview-area video { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .preview-empty { text-align: center; color: var(--muted); padding: 24px; }
+    .preview-empty svg { width: 32px; height: 32px; color: #fcd34d; margin-bottom: 8px; }
+    .preview-empty p { margin: 4px 0; font-size: 13px; }
+    .preview-empty .small { font-size: 11px; color: #b45309; }
+    .preview-clear {
+      position: absolute; top: 8px; right: 8px;
+      width: 32px; height: 32px; border-radius: 999px;
+      background: rgba(0, 0, 0, 0.6); color: white; border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; transition: background 0.15s;
+    }
+    .preview-clear:hover { background: rgba(0, 0, 0, 0.85); }
+    .preview-clear svg { width: 16px; height: 16px; }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      font-family: inherit; font-size: 14px; font-weight: 600;
+      padding: 12px 16px; border-radius: 10px; border: 1px solid transparent;
+      cursor: pointer; transition: all 0.15s; text-decoration: none; min-height: 44px;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+    .btn-outline { background: white; color: var(--primary); border-color: var(--border); }
+    .btn-outline:hover:not(:disabled) { background: var(--bg); }
+    .btn-green { background: var(--green); color: white; }
+    .btn-green:hover:not(:disabled) { background: #166534; }
+    .btn-ghost { background: transparent; color: var(--muted); }
+    .btn-ghost:hover:not(:disabled) { background: rgba(255, 251, 235, 0.7); }
+    .btn svg { width: 16px; height: 16px; }
+    .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .btn-full { width: 100%; }
+    .btn-stack { display: flex; flex-direction: column; gap: 8px; }
+
+    .loading-box { background: var(--amber-bg); border-radius: 12px; padding: 24px; text-align: center; }
+    .spinner {
+      width: 32px; height: 32px; border: 3px solid #fde68a;
+      border-top-color: var(--primary); border-radius: 50%;
+      animation: spin 0.8s linear infinite; margin: 0 auto 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-title { font-size: 14px; font-weight: 600; color: #7c2d12; margin: 0 0 4px; }
+    .loading-sub { font-size: 12px; color: var(--muted); margin: 0; }
+
+    .error-box {
+      display: flex; gap: 12px; padding: 16px;
+      background: var(--red-bg); border: 1px solid var(--red-border);
+      border-radius: 12px; color: #7f1d1d; font-size: 14px;
+    }
+    .error-box svg { width: 16px; height: 16px; flex-shrink: 0; margin-top: 2px; }
+    .error-box strong { display: block; margin-bottom: 4px; }
+    .error-box p { margin: 0 0 8px; font-size: 12px; line-height: 1.5; }
+
+    .tips { background: rgba(254, 243, 199, 0.6); border-radius: 8px; padding: 12px; font-size: 12px; color: #78350f; line-height: 1.5; }
+    .tips strong { color: #7c2d12; }
+    .tips ul { margin: 4px 0 0; padding-left: 16px; }
+
+    .result-header { background: linear-gradient(135deg, var(--primary), #d97706); color: white; padding: 20px; }
+    .result-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: rgba(255, 255, 255, 0.2); color: white;
+      padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 600; margin-bottom: 8px;
+    }
+    .result-chip svg { width: 12px; height: 12px; }
+    .result-title { font-size: 24px; font-weight: 800; margin: 0 0 8px; line-height: 1.2; }
+    .result-desc { font-size: 13px; color: rgba(255, 255, 255, 0.9); margin: 0; line-height: 1.5; }
+    .result-meta { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 16px; font-size: 12px; }
+    .result-meta span { display: inline-flex; align-items: center; gap: 6px; }
+    .result-meta svg { width: 14px; height: 14px; }
+    .provider-line { margin-top: 12px; }
+    .provider-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      background: rgba(255, 255, 255, 0.18);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      color: rgba(255, 255, 255, 0.92);
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+    }
+
+    .section-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; margin: 0 0 12px; }
+    .section-title svg { width: 16px; height: 16px; }
+
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip {
+      display: inline-flex; align-items: center;
+      padding: 4px 10px; background: #dcfce7; color: #14532d;
+      border-radius: 999px; font-size: 12px; font-weight: 500;
+    }
+
+    .missing-list { list-style: none; padding: 0; margin: 0; }
+    .missing-list li { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 14px; color: #78350f; }
+    .missing-num {
+      width: 20px; height: 20px; background: #fde68a; color: #78350f;
+      border-radius: 999px; display: inline-flex; align-items: center; justify-content: center;
+      font-size: 10px; font-weight: 700; flex-shrink: 0;
+    }
+    .missing-help { font-size: 12px; color: var(--muted); margin: 0 0 12px; line-height: 1.5; }
+
+    .steps { list-style: none; padding: 0; margin: 0; }
+    .steps li { display: flex; gap: 12px; padding: 8px 0; }
+    .step-num {
+      width: 28px; height: 28px; background: var(--primary); color: white;
+      border-radius: 999px; display: inline-flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700; flex-shrink: 0;
+    }
+    .step-text { font-size: 14px; line-height: 1.6; color: var(--fg); padding-top: 4px; }
+
+    footer {
+      margin-top: auto; padding: 16px;
+      border-top: 1px solid rgba(253, 230, 138, 0.6);
+      background: rgba(255, 248, 237, 0.8); backdrop-filter: blur(8px);
+    }
+    .footer-inner { max-width: 768px; margin: 0 auto; text-align: center; font-size: 12px; color: var(--muted); line-height: 1.5; }
+    .footer-inner strong { color: #7c2d12; }
+    .footer-inner .leaf { color: var(--green); }
+
+    .recipe-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    @media (max-width: 640px) { .recipe-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } }
+    .recipe-chooser { margin-top: 22px; }
+    .recipe-chooser h2 { margin: 0 0 8px; font-size: 22px; }
+    .recipe-chooser p { margin: 0 0 18px; color: var(--muted); font-size: 14px; }
+    .recipe-tile { display: block; overflow: hidden; border: 1px solid #292524; border-radius: 12px; color: var(--fg); text-decoration: none; background: #fff; transition: transform .15s, box-shadow .15s; }
+    .recipe-tile:hover, .recipe-tile:focus-visible { transform: translateY(-2px); box-shadow: 0 4px 0 #292524; }
+    .recipe-tile img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; background: var(--amber-bg); }
+    .recipe-tile span { display: block; padding: 10px; font-size: 13px; font-weight: 600; }
+    .recipe-tile small { display: block; padding: 0 10px 10px; color: var(--muted); }
+    .page-tabs { display:flex; gap:8px; margin: 18px 0; flex-wrap:wrap; }
+    .page-tabs button { border:1px solid #292524; border-radius: 999px; padding: 9px 17px; background:#fff; color:#292524; cursor:pointer; font:inherit; font-weight:600; }
+    .page-tabs button.active { background:#292524; color:#fff; }
+    .recommend-tag { display:inline-block; margin:8px 0 0 10px; padding:3px 7px; background:#fef3c7; border-radius:6px; font-size:11px; font-weight:700; }
+    /* Product layout: editorial browse on desktop, direct-action scan on phones. */
+    :root { --bg:#f7f5ef; --fg:#22251e; --muted:#656a5b; --primary:#ad4829; --primary-hover:#87371f; --green:#245c42; --border:#deded3; --shadow:0 8px 30px rgba(34,37,30,.055); }
+    body { background:var(--bg); }
+    header { background:#f7f5efed; border-bottom:1px solid #d5d6c9; }
+    .header-inner, .footer-inner { max-width:1280px; }
+    .logo-title { color:var(--fg); font-size:18px; }
+    .logo-sub { color:var(--muted); }
+    .logo-icon { background:var(--green); border-radius:10px; }
+    .badge-sus { background:#e8eee4; border-color:#cbd7c7; color:#245c42; }
+    main { max-width:1280px; padding:26px 32px 64px; }
+    .page-tabs { margin:0 0 28px; border-bottom:1px solid #d7d8cb; gap:24px; }
+    .page-tabs button { min-height:48px; border:0; border-radius:0; background:transparent; color:var(--muted); padding:10px 3px; }
+    .page-tabs button.active { background:transparent; color:var(--fg); box-shadow:inset 0 -3px var(--green); }
+    :focus-visible { outline:3px solid #245c42; outline-offset:3px; }
+    .hero { text-align:left; margin:0; padding:22px 24px 0 0; }
+    .hero h1 { font-size:clamp(32px,3.1vw,52px); letter-spacing:-.045em; color:var(--fg); }
+    .hero h1 .accent { color:var(--primary); }
+    .hero p { margin:0; max-width:520px; color:var(--muted); }
+    .hero-chip { background:#e8eee4; color:var(--green); font-weight:700; }
+    .stats { display:flex; margin-top:28px; gap:8px; }
+    .stat { border:0; background:transparent; padding:0; display:flex; align-items:center; gap:7px; }
+    .stat:not(:last-child)::after { content:'→'; color:#a7ad9b; padding:0 5px; }
+    .stat-icon { display:none; }
+    .stat-label { font-size:12px; color:var(--muted); font-weight:700; }
+    #scanPage { display:grid; grid-template-columns:minmax(0,1fr) minmax(360px,460px); gap:26px 40px; align-items:start; }
+    #inputCard { grid-column:2; grid-row:1; margin:0; }
+    #resultContainer, #recipeChooser { grid-column:1 / -1; min-width:0; }
+    #recipeChooser { margin-top:16px; }
+    #recipeChooser h2, #viralPage h2 { font-size:clamp(25px,2.5vw,34px); letter-spacing:-.035em; }
+    .card { border:1px solid #d6d8cb; border-radius:18px; background:#fff; }
+    .card-header { border-bottom:1px solid #edf0e8; }
+    .card-title { color:var(--fg); }
+    .preview-area { border:1px dashed #aab3a2; background:#f1f3ed; aspect-ratio:4/3; }
+    .preview-empty { color:var(--muted); }
+    .preview-empty svg { color:var(--green); }
+    .btn-primary { background:var(--green); }
+    .btn-primary:hover:not(:disabled), .btn-green:hover:not(:disabled) { background:#194632; }
+    .btn-outline { color:var(--fg); border-color:#c5cabe; }
+    .btn-green { background:var(--green); }
+    .btn { transition:background .15s, transform .15s; }
+    .btn:hover:not(:disabled) { transform:translateY(-1px); }
+    .tips { background:#f2f4ed; color:#4b5949; }
+    .tips strong { color:var(--green); }
+    .recipe-grid { grid-template-columns:repeat(4,minmax(0,1fr)); gap:18px; }
+    .recipe-tile { border-color:#53584e; border-radius:14px; box-shadow:0 2px 8px #2528200b; }
+    .recipe-tile img { aspect-ratio:4/3; }
+    .recipe-tile span { font-size:14px; line-height:1.35; padding:12px 13px 4px; }
+    .recipe-tile small { padding:0 13px 13px; }
+    .recommend-tag { background:#e8eee4; color:var(--green); }
+    #recipeQuery { background:#fff; }
+    #recipeQuery:focus { outline:2px solid var(--green); outline-offset:1px; }
+    .result-header { background:var(--green); }
+    footer { background:#f1f1e8; border-top-color:#dadccf; }
+    @media (max-width:1000px) {
+      main { padding:22px 24px 58px; }
+      #scanPage { grid-template-columns:minmax(0,1fr) minmax(320px,400px); gap:22px; }
+      .recipe-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+      .stats { flex-wrap:wrap; }
+    }
+    @media (max-width:720px) {
+      main { padding:16px 18px 92px; }
+      .badge-sus { display:none; }
+      .page-tabs { position:sticky; top:60px; z-index:25; background:var(--bg); margin:0 -18px 16px; padding:0 18px; justify-content:space-around; }
+      .page-tabs button { flex:1; min-height:48px; }
+      #scanPage { display:flex; flex-direction:column; gap:0; }
+      #scanPage > * { width:100%; }
+      .hero { padding:12px 2px 20px; }
+      .hero h1 { font-size:clamp(29px,7vw,40px); margin-bottom:10px; }
+      .hero p { font-size:14px; line-height:1.5; }
+      .hero-chip { font-size:10px; }
+      .stats { margin-top:15px; }
+      #inputCard { margin:0 0 18px; }
+      .preview-area { aspect-ratio:16/10; }
+      #recipeChooser { margin-top:16px; }
+      .recipe-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+      .recipe-tile img { aspect-ratio:1/1; }
+      .recipe-tile span { font-size:13px; }
+      #recipeSearch { flex-wrap:wrap; }
+      #recipeSearch input { flex-basis:100%; min-height:46px; }
+      #recipeSearch button { width:100%; }
+    }
+    @media (max-width:380px) {
+      main { padding-inline:12px; }
+      .page-tabs { margin-inline:-12px; padding-inline:12px; }
+      .hero h1 { font-size:28px; }
+      .recipe-grid { gap:9px; }
+      .card-body { padding:14px; }
+    }
+    @media (prefers-reduced-motion:reduce) {
+      *,*::before,*::after { animation-duration:.01ms !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }
+    }
+    @media (max-width:720px) {
+      .hero-chip { margin-bottom:8px; }
+      .preview-clear { width:44px; height:44px; }
+      .btn-row { gap:10px; }
+      .card-header { padding:15px 16px 10px; }
+      .card-body { padding:16px; }
+      .recipe-tile { min-width:0; }
+      .recipe-tile span { overflow-wrap:anywhere; }
+    }
+    .hidden { display: none !important; }
+    .fade-in { animation: fadeIn 0.35s ease-out; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 480px) {
+      .hero h1 { font-size: 26px; }
+      .stats { gap: 8px; }
+      .stat { padding: 10px 8px; }
+      .btn-row { gap: 8px; }
+      main { padding: 16px 12px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z"/>
+            <line x1="6" y1="17" x2="18" y2="17"/>
+          </svg>
+        </div>
+        <div class="logo-text">
+          <div class="logo-title">Resep in aja</div>
+          <div class="logo-sub">Zero-Waste Fridge AI</div>
+        </div>
+      </div>
+      <span class="badge-sus">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19.2 2.96c1.4 9.3-3.2 12.8-8.2 13.4"/>
+          <path d="M2 21c0-3 1.85-5.36 5.08-6"/>
+        </svg>
+        Sustainability
+      </span>
+    </div>
+  </header>
+
+  <main>
+    <nav class="page-tabs" aria-label="Navigasi resep">
+      <button id="tabScan" class="active" type="button">Scan Bahan</button>
+      <button id="tabViral" type="button">Viral Foodies</button>
+    </nav>
+    <section id="scanPage">
+    <section class="hero" id="hero">
+      <div class="hero-chip">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3z"/>
+        </svg>
+        Hackathon Prototype · Food Waste Reduction
+      </div>
+      <h1>Isi kulkas seadanya.<br /><span class="accent">Ide masaknya banyak.</span></h1>
+      <p>Foto satu atau beberapa bahan, lalu temukan resep yang bisa kamu coba. Atau langsung jelajahi ide masakan di bawah.</p>
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+              <circle cx="12" cy="13" r="4"/>
+            </svg>
+          </div>
+          <div class="stat-label">Foto Bahan</div>
+        </div>
+        <div class="stat">
+          <div class="stat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3z"/>
+            </svg>
+          </div>
+          <div class="stat-label">AI Identifikasi</div>
+        </div>
+        <div class="stat">
+          <div class="stat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z"/>
+              <line x1="6" y1="17" x2="18" y2="17"/>
+            </svg>
+          </div>
+          <div class="stat-label">Resep Siap</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="card" id="inputCard">
+      <div class="card-header">
+        <h2 class="card-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2 12h20"/>
+            <path d="M2 6h20"/>
+            <path d="M2 18h20"/>
+          </svg>
+Scan bahan yang kamu punya
+        </h2>
+      </div>
+      <div class="card-body">
+        <div class="preview-area" id="previewArea">
+          <div class="preview-empty" id="previewEmpty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+              <circle cx="12" cy="13" r="4"/>
+            </svg>
+            <p>Belum ada gambar</p>
+            <p class="small">Ambil foto atau unggah dari galeri</p>
+          </div>
+          <img id="previewImg" class="hidden" alt="Pratinjau bahan makanan" />
+          <video id="cameraVideo" class="hidden" autoplay playsinline muted aria-label="Pratinjau kamera langsung"></video>
+          <button class="preview-clear hidden" id="clearBtn" aria-label="Hapus gambar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="btn-row" style="margin-bottom: 12px;">
+          <button class="btn btn-primary" id="cameraBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+              <circle cx="12" cy="13" r="4"/>
+            </svg>
+            Buka Kamera
+          </button>
+          <button class="btn btn-outline" id="uploadBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            Upload
+          </button>
+        </div>
+
+        <button class="btn btn-green btn-full hidden" id="submitBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3z"/>
+          </svg>
+          Cari Resep Sekarang
+        </button>
+
+        <p id="photoCount" aria-live="polite" style="font-size:13px; margin:8px 0;"></p>
+        <div class="loading-box hidden" id="loadingBox">
+          <div class="spinner"></div>
+          <p class="loading-title">AI sedang memproses bahan makananmu...</p>
+          <p class="loading-sub">Identifikasi bahan &amp; cari resep paling cocok (±10-20 detik)</p>
+        </div>
+
+        <div class="error-box hidden" id="errorBox" style="margin-top: 12px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <div>
+            <strong>Terjadi kesalahan</strong>
+            <p id="errorMsg">Pesan error di sini.</p>
+            <button class="btn btn-outline" id="retryBtn" style="height: 32px; padding: 4px 12px; font-size: 12px;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"/>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+              </svg>
+              Coba lagi
+            </button>
+          </div>
+        </div>
+
+        <div class="tips" id="tipsBox" style="margin-top: 12px;">
+          <strong>Tips foto yang baik:</strong>
+          <ul>
+            <li>Pastikan bahan terlihat jelas dan tidak tertumpuk</li>
+            <li>Pencahayaan cukup (hindari foto gelap)</li>
+            <li>Boleh beberapa bahan sekaligus dalam satu foto</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div id="resultContainer"></div>
+    <section class="recipe-chooser" id="recipeChooser">
+      <h2>Pilih Inspirasi Masakan</h2>
+      <p>Jelajahi resep bergambar dari Cookpad, atau scan bahanmu untuk saran lebih relevan. Resep tautan dapat membutuhkan bahan tambahan.</p>
+      <form id="recipeSearch" style="display:flex;gap:8px;margin-bottom:18px">
+        <input id="recipeQuery" type="search" placeholder="Cari resep atau bahan: telur tempe, ayam, kangkung..." aria-label="Cari resep" style="flex:1;min-width:0;border:1px solid #292524;border-radius:9px;padding:10px;font:inherit" />
+        <button type="submit" class="btn btn-green">Cari</button>
+      </form>
+      <div class="recipe-grid" id="recipeGallery" aria-live="polite">Memuat inspirasi resep...</div>
+    </section>
+    </section>
+    <section id="viralPage" class="recipe-chooser hidden">
+      <h2>Viral Foodies ✨</h2>
+      <p>Inspirasi kreasi mi yang sering dibagikan sebagai food hack. Pilihan dari resep Cookpad; bukan daftar tren TikTok real-time. Cek bahan tambahan di resep aslinya.</p>
+      <div class="recipe-grid" id="viralGallery" aria-live="polite">Memuat resep...</div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+      <strong>Resep in aja</strong> · Purwarupa Hackathon Sustainability<br />
+      <span class="leaf">🍃</span> Kurangi limbah makanan rumah tangga
+    </div>
+  </footer>
+
+  <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none" />
+  <input type="file" id="fileInput" accept="image/*" multiple style="display:none" />
+
+  <script>
+    let imageFile = null;
+    let imageFiles = [];
+    let imagePreviewUrl = null;
+    let cameraStream = null;
+    let cameraRequest = 0;
+
+    const cameraBtn = document.getElementById('cameraBtn');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const cameraInput = document.getElementById('cameraInput');
+    const fileInput = document.getElementById('fileInput');
+    const previewImg = document.getElementById('previewImg');
+    const cameraVideo = document.getElementById('cameraVideo');
+    const previewEmpty = document.getElementById('previewEmpty');
+    const clearBtn = document.getElementById('clearBtn');
+    const submitBtn = document.getElementById('submitBtn');
+    const loadingBox = document.getElementById('loadingBox');
+    const errorBox = document.getElementById('errorBox');
+    const errorMsg = document.getElementById('errorMsg');
+    const retryBtn = document.getElementById('retryBtn');
+    const tipsBox = document.getElementById('tipsBox');
+    const resultContainer = document.getElementById('resultContainer');
+    const hero = document.getElementById('hero');
+
+    cameraBtn.addEventListener('click', toggleCamera);
+    uploadBtn.addEventListener('click', () => fileInput.click());
+    cameraInput.addEventListener('change', (e) => handleFileSelect(e.target.files[0]));
+    fileInput.addEventListener('change', (e) => handleFileSelect([...e.target.files]));
+    clearBtn.addEventListener('click', clearImage);
+    submitBtn.addEventListener('click', handleSubmit);
+    retryBtn.addEventListener('click', handleSubmit);
+
+    function stopCamera() {
+      cameraRequest++;
+      if (cameraStream) cameraStream.getTracks().forEach(track => track.stop());
+      cameraStream = null;
+      cameraVideo.srcObject = null;
+      cameraVideo.classList.add('hidden');
+      cameraBtn.lastChild.textContent = ' Buka Kamera';
+    }
+
+    async function toggleCamera() {
+      if (cameraStream) {
+        stopCamera();
+        clearImage();
+        return;
+      }
+      if (!navigator.mediaDevices?.getUserMedia) {
+        showError('Kamera live butuh browser yang mendukung dan akses localhost/HTTPS. Coba tombol Upload.');
+        return;
+      }
+      const request = ++cameraRequest;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+        if (request !== cameraRequest) {
+          stream.getTracks().forEach(track => track.stop());
+          return;
+        }
+        clearImage();
+        cameraStream = stream;
+        cameraVideo.srcObject = stream;
+        cameraVideo.classList.remove('hidden');
+        previewEmpty.classList.add('hidden');
+        previewImg.classList.add('hidden');
+        clearBtn.classList.remove('hidden');
+        submitBtn.classList.remove('hidden');
+        submitBtn.lastChild.textContent = ' Scan Kamera Sekarang';
+        cameraBtn.lastChild.textContent = ' Tutup Kamera';
+        await cameraVideo.play();
+      } catch (err) {
+        if (request === cameraRequest) {
+          stopCamera();
+          showError('Kamera tidak bisa dibuka. Izinkan akses kamera atau gunakan Upload.');
+        }
+      }
+    }
+
+    window.addEventListener('pagehide', stopCamera);
+
+    function recipeTiles(cards) {
+      return (cards || []).filter(c => c && c.nama && /^https:\/\//.test(c.thumbnail) && /^https:\/\//.test(c.url)).map(c => `
+        <a class="recipe-tile" href="${escapeHtml(c.url)}" target="_blank" rel="noopener noreferrer">
+          <img src="${escapeHtml(c.thumbnail)}" alt="Foto ${escapeHtml(c.nama)}" loading="lazy" />
+          ${c.recommended ? '<b class="recommend-tag">⭐ Recommended</b>' : ''}
+          <span>${escapeHtml(c.nama)} ↗</span>
+          <small>${escapeHtml(c.source || 'TheMealDB')}</small>
+        </a>
+      `).join('');
+    }
+
+    async function loadGallery() {
+      const gallery = document.getElementById('recipeGallery');
+      try {
+        const response = await fetch('/api/inspirasi');
+        if (!response.ok) throw new Error('Katalog gagal dimuat');
+        gallery.innerHTML = recipeTiles((await response.json()).recipes) || 'Belum ada resep tersedia. Coba scan bahanmu.';
+      } catch (err) {
+        gallery.textContent = 'Katalog belum bisa dimuat. Coba refresh halaman.';
+      }
+    }
+    loadGallery();
+    document.getElementById('recipeSearch').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const query = document.getElementById('recipeQuery').value.trim();
+      if (!query) return loadGallery();
+      const gallery = document.getElementById('recipeGallery');
+      gallery.textContent = 'Mencari resep...';
+      try {
+        const response = await fetch('/api/resep?q=' + encodeURIComponent(query));
+        if (!response.ok) throw new Error('Pencarian gagal');
+        gallery.innerHTML = recipeTiles((await response.json()).recipes) || 'Tidak ada resep. Coba kata kunci lain.';
+      } catch (err) {
+        gallery.textContent = 'Pencarian gagal. Coba lagi.';
+      }
+    });
+
+    let viralLoaded = false;
+    document.getElementById('tabScan').addEventListener('click', () => switchPage(false));
+    document.getElementById('tabViral').addEventListener('click', () => switchPage(true));
+    function switchPage(viral) {
+      document.getElementById('scanPage').classList.toggle('hidden', viral);
+      document.getElementById('viralPage').classList.toggle('hidden', !viral);
+      document.getElementById('tabScan').classList.toggle('active', !viral);
+      document.getElementById('tabViral').classList.toggle('active', viral);
+      if (viral) {
+        stopCamera();
+        if (!viralLoaded) loadViral();
+      }
+    }
+    async function loadViral() {
+      const gallery = document.getElementById('viralGallery');
+      try {
+        const response = await fetch('/api/viral');
+        if (!response.ok) throw new Error('Katalog gagal dimuat');
+        gallery.innerHTML = recipeTiles((await response.json()).recipes) || 'Belum ada resep tersedia.';
+        viralLoaded = true;
+      } catch (err) {
+        gallery.textContent = 'Resep belum bisa dimuat. Coba buka tab ini lagi.';
+      }
+    }
+
+    function handleFileSelect(input) {
+      const files = Array.isArray(input) ? input : [input];
+      if (!files.length || !files[0]) return;
+      if (imageFiles.length + files.length > 5) {
+        showError('Maksimal 5 foto per scan. Hapus foto untuk mulai ulang.');
+        return;
+      }
+      for (const file of files) {
+        if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type) || file.size > 8 * 1024 * 1024) {
+          showError('Gunakan foto JPG/PNG/WEBP/GIF, maksimal 8 MB per foto.');
+          return;
+        }
+      }
+      imageFiles.push(...files);
+      const file = imageFiles[imageFiles.length - 1];
+      stopCamera();
+      submitBtn.lastChild.textContent = ' Cari Resep Sekarang';
+      cameraInput.value = '';
+      fileInput.value = '';
+
+      if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+      imagePreviewUrl = URL.createObjectURL(file);
+      imageFile = file;
+      document.getElementById('photoCount').textContent = `${imageFiles.length}/5 foto siap discan. Upload lagi untuk menambah; Hapus untuk mulai ulang.`;
+
+      previewImg.src = imagePreviewUrl;
+      previewImg.classList.remove('hidden');
+      clearBtn.classList.remove('hidden');
+      previewEmpty.classList.add('hidden');
+
+      submitBtn.classList.remove('hidden');
+      errorBox.classList.add('hidden');
+      tipsBox.classList.add('hidden');
+      resultContainer.innerHTML = '';
+    }
+
+    function clearImage() {
+      stopCamera();
+      submitBtn.lastChild.textContent = ' Cari Resep Sekarang';
+      if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+      imagePreviewUrl = null;
+      imageFile = null;
+      imageFiles = [];
+      document.getElementById('photoCount').textContent = '';
+      previewImg.src = '';
+      previewImg.classList.add('hidden');
+      clearBtn.classList.add('hidden');
+      previewEmpty.classList.remove('hidden');
+      submitBtn.classList.add('hidden');
+      loadingBox.classList.add('hidden');
+      errorBox.classList.add('hidden');
+      tipsBox.classList.remove('hidden');
+      resultContainer.innerHTML = '';
+      hero.style.display = '';
+      document.getElementById('recipeChooser').classList.remove('hidden');
+    }
+
+    async function handleSubmit() {
+      if (cameraStream) {
+        if (!cameraVideo.videoWidth) {
+          showError('Kamera belum siap. Tunggu sebentar lalu scan lagi.');
+          return;
+        }
+        const canvas = document.createElement('canvas');
+        const scale = Math.min(1, 1280 / cameraVideo.videoWidth);
+        canvas.width = Math.round(cameraVideo.videoWidth * scale);
+        canvas.height = Math.round(cameraVideo.videoHeight * scale);
+        canvas.getContext('2d').drawImage(cameraVideo, 0, 0, canvas.width, canvas.height);
+        const captured = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+        if (!captured) {
+          showError('Gagal mengambil frame kamera. Coba lagi.');
+          return;
+        }
+        if (imageFiles.length >= 5) {
+          showError('Maksimal 5 foto. Hapus foto untuk mulai ulang.');
+          return;
+        }
+        imageFiles.push(captured);
+        // Full frame tetap dikirim agar bahan di tepi/tengah tidak terpotong.
+        // Empat crop bertumpang tindih membantu membaca bahan kecil yang tersebar.
+        if (imageFiles.length === 1 && canvas.width >= 700 && canvas.height >= 500) {
+          const cw = Math.round(canvas.width * 0.62);
+          const ch = Math.round(canvas.height * 0.62);
+          for (const [x, y] of [[0, 0], [canvas.width - cw, 0], [0, canvas.height - ch], [canvas.width - cw, canvas.height - ch]]) {
+            const crop = document.createElement('canvas');
+            crop.width = cw; crop.height = ch;
+            crop.getContext('2d').drawImage(canvas, x, y, cw, ch, 0, 0, cw, ch);
+            const blob = await new Promise(resolve => crop.toBlob(resolve, 'image/jpeg', 0.72));
+            if (blob) imageFiles.push(blob);
+          }
+        }
+        imageFile = captured;
+        document.getElementById('photoCount').textContent = `${imageFiles.length}/5 tampilan siap dianalisis (foto utuh + auto-crop).`;
+        stopCamera();
+        if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+        imagePreviewUrl = URL.createObjectURL(captured);
+        previewImg.src = imagePreviewUrl;
+        previewImg.classList.remove('hidden');
+        submitBtn.lastChild.textContent = ' Cari Resep Sekarang';
+      }
+      if (!imageFile) {
+        showError('Buka kamera atau pilih foto bahan makanan terlebih dahulu.');
+        return;
+      }
+
+      submitBtn.classList.add('hidden');
+      clearBtn.classList.add('hidden');
+      loadingBox.classList.remove('hidden');
+      errorBox.classList.add('hidden');
+      tipsBox.classList.add('hidden');
+      resultContainer.innerHTML = '';
+      cameraBtn.disabled = true;
+      uploadBtn.disabled = true;
+
+      try {
+        const formData = new FormData();
+        for (const file of imageFiles) formData.append('image', file, file.name || 'kamera.jpg');
+
+        // Panggil local proxy server (multi-provider dengan auto-fallback)
+        const resp = await fetch('/api/scan-resep', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const data = await resp.json();
+
+        if (!resp.ok) {
+          const msg = data?.error || 'Gagal memproses gambar. Coba lagi.';
+          showError(msg);
+          loadingBox.classList.add('hidden');
+          submitBtn.classList.remove('hidden');
+          clearBtn.classList.remove('hidden');
+          cameraBtn.disabled = false;
+          uploadBtn.disabled = false;
+          return;
+        }
+
+        renderResult(data.recipe, data.provider, data.model);
+        loadingBox.classList.add('hidden');
+        clearBtn.classList.remove('hidden');
+        cameraBtn.disabled = false;
+        uploadBtn.disabled = false;
+      } catch (err) {
+        console.error(err);
+        let msg = err.message || 'Gagal memproses gambar.';
+        if (err.message && err.message.includes('Failed to fetch')) {
+          msg = 'Tidak bisa terhubung ke server. Pastikan server.py sedang berjalan (jalankan: python3 server.py).';
+        }
+        showError(msg);
+        loadingBox.classList.add('hidden');
+        submitBtn.classList.remove('hidden');
+        clearBtn.classList.remove('hidden');
+        cameraBtn.disabled = false;
+        uploadBtn.disabled = false;
+      }
+    }
+
+    function showError(msg) {
+      errorMsg.textContent = msg;
+      errorBox.classList.remove('hidden');
+      errorBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function renderResult(r, provider, model) {
+      hero.style.display = 'none';
+      document.getElementById('recipeChooser').classList.add('hidden');
+      const providerLabels = {
+        openai: 'OpenAI GPT-4o',
+        anthropic: 'Anthropic Claude',
+        gemini: 'Google Gemini',
+        groq: 'Groq Llama',
+        openrouter: 'OpenRouter',
+        bigmodel: 'BigModel GLM-4V',
+        siliconflow: 'SiliconFlow (DeepSeek-VL2)',
+      };
+      const providerLabel = providerLabels[provider] || (provider || 'AI').toString();
+      const modelLabel = model || '';
+      const providerBadge = provider
+        ? `<span class="provider-badge" title="Provider: ${escapeHtml(modelLabel)}">${escapeHtml(providerLabel)}${modelLabel ? ' · ' + escapeHtml(modelLabel) : ''}</span>`
+        : '';
+      const html = `
+        <div class="fade-in">
+          <div class="card">
+            <div class="result-header">
+              <span class="result-chip">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                  <polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+                Resep Hasil AI
+              </span>
+              <h2 class="result-title">${escapeHtml(r.namaMasakan)}</h2>
+              <p class="result-desc">${escapeHtml(r.deskripsi || '')}</p>
+              <div class="result-meta">
+                <span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                  ${Number(r.waktuMasak) || 15} menit
+                </span>
+                <span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                  </svg>
+                  ${Number(r.porsi) || 2} porsi
+                </span>
+              </div>
+              ${providerBadge ? `<div class="provider-line">${providerBadge}</div>` : ''}
+            </div>
+          </div>
+
+          ${imagePreviewUrl ? `
+            <div class="card">
+              <div class="card-body" style="padding: 12px;">
+                <div style="position: relative; aspect-ratio: 16/9; overflow: hidden; border-radius: 8px;">
+                  <img src="${imagePreviewUrl}" alt="Foto bahan asli" style="width:100%;height:100%;object-fit:cover;display:block;" />
+                </div>
+              </div>
+            </div>
+          ` : ''}
+
+          <div class="card">
+            <div class="card-header">
+              <h3 class="section-title" style="color:#15803d;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                  <polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+                Bahan Terdeteksi (${(r.bahanTerdeteksi || []).length})
+              </h3>
+            </div>
+            <div class="card-body">
+              <div class="chips">
+                ${(r.bahanTerdeteksi || []).map(b => `<span class="chip">${escapeHtml(b)}</span>`).join('')}
+              </div>
+            </div>
+          </div>
+
+          ${(r.bahanKurang && r.bahanKurang.length) ? `
+            <div class="card" style="border-color: var(--amber-border); background: var(--amber-bg);">
+              <div class="card-header" style="border-bottom-color: var(--amber-border);">
+                <h3 class="section-title" style="color: #78350f;">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#b45309" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/>
+                    <line x1="12" y1="17" x2="12.01" y2="17"/>
+                  </svg>
+                  Bahan Dapur yang Mungkin Kurang
+                </h3>
+              </div>
+              <div class="card-body">
+                <p class="missing-help">Bahan dapur umum berikut tidak terlihat di foto. Cek dapur kamu sebelum mulai masak:</p>
+                <ul class="missing-list">
+                  ${r.bahanKurang.map((b, i) => `
+                    <li>
+                      <span class="missing-num">${i+1}</span>
+                      ${escapeHtml(b)}
+                    </li>
+                  `).join('')}
+                </ul>
+              </div>
+            </div>
+          ` : ''}
+
+          <div class="card">
+            <div class="card-header">
+              <h3 class="section-title" style="color: #7c2d12;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#c2410c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z"/>
+                  <line x1="6" y1="17" x2="18" y2="17"/>
+                </svg>
+                Langkah Memasak
+              </h3>
+            </div>
+            <div class="card-body">
+              <ol class="steps">
+                ${(r.langkah || []).map((s, i) => `
+                  <li>
+                    <span class="step-num">${i+1}</span>
+                    <span class="step-text">${escapeHtml(s)}</span>
+                  </li>
+                `).join('')}
+              </ol>
+            </div>
+          </div>
+
+          ${(r.menuAlternatif || []).length ? `
+            <div class="card">
+              <div class="card-header"><h3 class="section-title">Jelajahi Resep Lain</h3></div>
+              <div class="card-body">
+                <p class="missing-help">Resep dari Cookpad/TheMealDB berdasarkan bahan yang terdeteksi. Cek bahan tambahan di halaman tujuan—belum tentu semuanya tersedia di fotomu.</p>
+                <div class="recipe-grid">${recipeTiles(r.menuAlternatif)}</div>
+              </div>
+            </div>
+          ` : ''}
+
+          <div class="btn-stack" style="margin-top: 16px;">
+            <button class="btn btn-outline btn-full" id="newRecipeBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"/>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+              </svg>
+              Resep Baru
+            </button>
+          </div>
+        </div>
+      `;
+      resultContainer.innerHTML = html;
+
+      const newBtn = document.getElementById('newRecipeBtn');
+      if (newBtn) {
+        newBtn.addEventListener('click', () => {
+          clearImage();
+          resultContainer.innerHTML = '';
+          document.getElementById('inputCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      }
+      resultContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function escapeHtml(str) {
+      if (str == null) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+  </script>
+</body>
+</html>
