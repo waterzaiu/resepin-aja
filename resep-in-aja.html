@@ -514,6 +514,49 @@ Scan bahan yang kamu punya
             <li>Pencahayaan cukup (hindari foto gelap)</li>
             <li>Boleh beberapa bahan sekaligus dalam satu foto</li>
           </ul>
+          <p class="privacy-note" style="margin-top: 10px; font-size: 0.8rem; color: #78716c; border-top: 1px dashed #d6d3d1; padding-top: 10px;">
+            🔒 Privasi: foto bahanmu hanya diproses oleh penyedia AI pilihan
+            (bukan diteruskan ke penyedia lain). Foto tidak disimpan setelah
+            resep selesai dibuat.
+          </p>
+        </div>
+
+        <div class="manual-entry" style="margin-top: 16px; border-top: 1px dashed #a8a29e; padding-top: 16px;">
+          <strong style="display:block; margin-bottom: 8px;">Atau masukkan bahan manual</strong>
+          <form id="manualForm" style="display:flex; flex-direction:column; gap:10px;">
+            <div style="display:flex; gap:8px;">
+              <input id="manualIngredients" type="text" placeholder="Contoh: telur, nasi, bawang putih, kecap manis" aria-label="Bahan manual" style="flex:1;min-width:0;border:1px solid #292524;border-radius:9px;padding:10px;font:inherit" />
+              <button type="submit" class="btn btn-green">Cari Resep</button>
+            </div>
+            <div id="manualFilters" class="filters" style="display:flex; flex-wrap:wrap; gap:12px; align-items:center; font-size:13px;">
+              <label>Masakan:
+                <select id="filterCuisine" style="border:1px solid #292524;border-radius:7px;padding:5px;font:inherit">
+                  <option value="">Semua</option>
+                  <option value="indonesian">Indonesia</option>
+                  <option value="malaysian">Malaysia</option>
+                  <option value="japanese">Jepang</option>
+                  <option value="chinese">China</option>
+                  <option value="indian">India</option>
+                  <option value="mediterranean">Mediterania</option>
+                  <option value="italian">Italia</option>
+                  <option value="mexican">Meksiko</option>
+                  <option value="middle eastern">Timur Tengah</option>
+                  <option value="american">Amerika</option>
+                </select>
+              </label>
+              <label>Diet:
+                <select id="filterDiet" style="border:1px solid #292524;border-radius:7px;padding:5px;font:inherit">
+                  <option value="">Semua</option>
+                  <option value="vegetarian">Vegetarian</option>
+                  <option value="vegan">Vegan</option>
+                </select>
+              </label>
+              <label>Waktu maks:
+                <input id="filterMaxTime" type="number" min="1" placeholder="menit" style="width:80px;border:1px solid #292524;border-radius:7px;padding:5px;font:inherit" />
+              </label>
+            </div>
+          </form>
+          <div id="manualResults" aria-live="polite"></div>
         </div>
       </div>
     </div>
@@ -553,6 +596,30 @@ Scan bahan yang kamu punya
     let cameraStream = null;
     let cameraRequest = 0;
 
+    // ============================================================
+    // UPLOAD POLICY (single source of truth for the browser side).
+    // The backend (server.py) MUST enforce the same limits; these
+    // constants exist so both sides stay aligned. Coordinate with
+    // the backend child before changing any value here.
+    // ============================================================
+    const UPLOAD_POLICY = {
+      maxFiles: 5,                    // maximum number of images per scan
+      maxBytesPerFile: 4 * 1024 * 1024, // 4 MB per image
+      maxTotalBytes: 12 * 1024 * 1024,  // 12 MB total across all images
+      maxDecodedPixels: 16 * 1000 * 1000, // 16 million decoded pixels total
+    };
+    const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
+    // Monotonically increasing scan request ID. Each submission captures a
+    // fresh ID; stale async completions (camera capture, fetch) compare against
+    // it and bail out instead of clobbering newer state.
+    let scanRequestId = 0;
+    // Synchronous re-entrancy guard, set at the very first line of
+    // handleSubmit before any await.
+    let isSubmitting = false;
+    // AbortController for the in-flight scan fetch, cancelled on reset/retry.
+    let scanAbortController = null;
+
     const cameraBtn = document.getElementById('cameraBtn');
     const uploadBtn = document.getElementById('uploadBtn');
     const cameraInput = document.getElementById('cameraInput');
@@ -578,6 +645,9 @@ Scan bahan yang kamu punya
     submitBtn.addEventListener('click', handleSubmit);
     retryBtn.addEventListener('click', handleSubmit);
 
+    // stopCamera() stops an *installed* camera stream. It does NOT touch
+    // selected image state (that's clearImage's job). It always increments
+    // cameraRequest to invalidate any in-flight getUserMedia request token.
     function stopCamera() {
       cameraRequest++;
       if (cameraStream) cameraStream.getTracks().forEach(track => track.stop());
@@ -598,13 +668,15 @@ Scan bahan yang kamu punya
         return;
       }
       const request = ++cameraRequest;
+      let stream = null;
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
         if (request !== cameraRequest) {
+          // A newer camera request superseded this one; stop the acquired stream.
           stream.getTracks().forEach(track => track.stop());
           return;
         }
-        clearImage();
+        clearImageState();
         cameraStream = stream;
         cameraVideo.srcObject = stream;
         cameraVideo.classList.remove('hidden');
@@ -614,8 +686,17 @@ Scan bahan yang kamu punya
         submitBtn.classList.remove('hidden');
         submitBtn.lastChild.textContent = ' Scan Kamera Sekarang';
         cameraBtn.lastChild.textContent = ' Tutup Kamera';
-        await cameraVideo.play();
+        try {
+          await cameraVideo.play();
+        } catch (playErr) {
+          // Playback failed even though the stream was acquired: stop it so we
+          // don't leak a muted/stuck track, then surface the error.
+          stopCamera();
+          showError('Kamera tidak bisa ditampilkan. Izinkan akses kamera atau gunakan Upload.');
+          return;
+        }
       } catch (err) {
+        // getUserMedia rejected (permission denied, no device, etc.).
         if (request === cameraRequest) {
           stopCamera();
           showError('Kamera tidak bisa dibuka. Izinkan akses kamera atau gunakan Upload.');
@@ -626,7 +707,7 @@ Scan bahan yang kamu punya
     window.addEventListener('pagehide', stopCamera);
 
     function recipeTiles(cards) {
-      return (cards || []).filter(c => c && c.nama && /^https:\/\//.test(c.thumbnail) && /^https:\/\//.test(c.url)).map(c => `
+      return (cards || []).filter(c => c && c.nama && safeUrl(c.thumbnail) && safeUrl(c.url)).map(c => `
         <a class="recipe-tile" href="${escapeHtml(c.url)}" target="_blank" rel="noopener noreferrer">
           <img src="${escapeHtml(c.thumbnail)}" alt="Foto ${escapeHtml(c.nama)}" loading="lazy" />
           ${c.recommended ? '<b class="recommend-tag">⭐ Recommended</b>' : ''}
@@ -671,6 +752,76 @@ Scan bahan yang kamu punya
     });
 
     let viralLoaded = false;
+
+    // --- Manual ingredient entry (deterministic discovery, no AI needed) ---
+    document.getElementById('manualForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const text = document.getElementById('manualIngredients').value.trim();
+      if (!text) return;
+      const ingredients = text.split(',').map(s => s.trim()).filter(Boolean);
+      if (!ingredients.length) return;
+      const results = document.getElementById('manualResults');
+      results.innerHTML = '<p style="font-size:13px;color:#57534e;">Mencari resep yang cocok...</p>';
+      const preferences = {
+        cuisine: document.getElementById('filterCuisine').value || undefined,
+        diet: document.getElementById('filterDiet').value || undefined,
+        maxTimeMinutes: parseInt(document.getElementById('filterMaxTime').value, 10) || undefined,
+      };
+      try {
+        const resp = await fetch('/api/recipes/match', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ingredients, preferences }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          results.innerHTML = '<p style="font-size:13px;color:#b91c1c;">' + escapeHtml(data.error || 'Gagal mencari resep.') + '</p>';
+          return;
+        }
+        renderDiscoveryResults(results, data);
+      } catch (err) {
+        console.error(err);
+        results.innerHTML = '<p style="font-size:13px;color:#b91c1c;">Tidak bisa terhubung ke server.</p>';
+      }
+    });
+
+    function renderDiscoveryResults(container, data) {
+      const recipes = (data && data.recipes) || [];
+      const sourceLabel = (data && data.source) || 'unknown';
+      const fallback = !!(data && data.fallback);
+      if (!recipes.length) {
+        container.innerHTML = '<p style="font-size:13px;color:#57534e;">Tidak ada resep cocok untuk bahan tersebut. Coba tambah bahan atau kurangi filter.</p>';
+        return;
+      }
+      let html = '';
+      if (fallback) {
+        html += '<div class="warning-box" style="margin:8px 0;padding:10px 12px;border:1px solid #f59e0b;border-radius:8px;background:#fffbeb;font-size:13px;color:#92400e;">'
+          + '⚠️ Katalog utama tidak menghasilkan cukup hasil; menampilkan saran AI (mungkin kurang akurat).</div>';
+      }
+      html += '<div class="recipe-grid" style="margin-top:10px;">';
+      for (const r of recipes) {
+        const missing = (r.missingIngredients || []).slice(0, 4);
+        const badges = [];
+        if (r.cuisine) badges.push(escapeHtml(r.cuisine));
+        const diets = r.diet_tags || r.dietTags || [];
+        if (diets.length) badges.push(escapeHtml(diets.join(', ')));
+        const totalMin = r.total_minutes != null ? r.total_minutes : ((r.prep_minutes || 0) + (r.cook_minutes || 0));
+        if (totalMin) badges.push(escapeHtml(String(totalMin)) + ' mnt');
+        const source = escapeHtml(r.source_name || r.sourceName || r.source || sourceLabel);
+        html += '<div class="recipe-tile manual-tile" style="display:block;text-decoration:none;border:1px solid #e7e5e4;border-radius:10px;padding:12px;">'
+          + '<b>' + escapeHtml(r.title || r.nama || 'Resep') + '</b>'
+          + '<small>Skor kecocokan: ' + Math.round((r.matchScore || 0) * 100) + '%</small>'
+          + '<small>Bahan terpenuhi: ' + escapeHtml((r.matchedIngredients || []).join(', ')) + '</small>'
+          + (missing.length ? '<small>Kurang: ' + escapeHtml(missing.join(', ')) + '</small>' : '')
+          + (badges.length ? '<small>' + badges.join(' · ') + '</small>' : '')
+          + '<small style="color:#78716c;">Sumber: ' + source + '</small>'
+          + (r.attribution_text ? '<small style="color:#78716c;">' + escapeHtml(r.attribution_text) + '</small>' : '')
+          + '</div>';
+      }
+      html += '</div>';
+      container.innerHTML = html;
+    }
+
     document.getElementById('tabScan').addEventListener('click', () => switchPage(false));
     document.getElementById('tabViral').addEventListener('click', () => switchPage(true));
     function switchPage(viral) {
@@ -695,18 +846,35 @@ Scan bahan yang kamu punya
       }
     }
 
+    // Reads the currently selected image files and returns their total size
+    // in bytes (0 when none selected).
+    function totalSelectedBytes() {
+      return imageFiles.reduce((sum, f) => sum + (f && f.size ? f.size : 0), 0);
+    }
+
     function handleFileSelect(input) {
       const files = Array.isArray(input) ? input : [input];
       if (!files.length || !files[0]) return;
-      if (imageFiles.length + files.length > 5) {
-        showError('Maksimal 5 foto per scan. Hapus foto untuk mulai ulang.');
+      // Enforce the UPLOAD_POLICY on the browser side (usability + early
+      // rejection). The server re-enforces the same limits as a security
+      // control; never rely on these client checks alone.
+      if (imageFiles.length + files.length > UPLOAD_POLICY.maxFiles) {
+        showError('Maksimal ' + UPLOAD_POLICY.maxFiles + ' foto per scan. Hapus foto untuk mulai ulang.');
         return;
       }
       for (const file of files) {
-        if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type) || file.size > 8 * 1024 * 1024) {
-          showError('Gunakan foto JPG/PNG/WEBP/GIF, maksimal 8 MB per foto.');
+        if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+          showError('Gunakan foto JPG/PNG/WEBP.');
           return;
         }
+        if (file.size > UPLOAD_POLICY.maxBytesPerFile) {
+          showError('Maksimal ' + (UPLOAD_POLICY.maxBytesPerFile / (1024 * 1024)) + ' MB per foto.');
+          return;
+        }
+      }
+      if (totalSelectedBytes() + files.reduce((s, f) => s + f.size, 0) > UPLOAD_POLICY.maxTotalBytes) {
+        showError('Total foto melebihi ' + (UPLOAD_POLICY.maxTotalBytes / (1024 * 1024)) + ' MB. Kurangi jumlah atau ukuran foto.');
+        return;
       }
       imageFiles.push(...files);
       const file = imageFiles[imageFiles.length - 1];
@@ -718,7 +886,7 @@ Scan bahan yang kamu punya
       if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
       imagePreviewUrl = URL.createObjectURL(file);
       imageFile = file;
-      document.getElementById('photoCount').textContent = `${imageFiles.length}/5 foto siap discan. Upload lagi untuk menambah; Hapus untuk mulai ulang.`;
+      document.getElementById('photoCount').textContent = `${imageFiles.length}/${UPLOAD_POLICY.maxFiles} foto siap discan. Upload lagi untuk menambah; Hapus untuk mulai ulang.`;
 
       previewImg.src = imagePreviewUrl;
       previewImg.classList.remove('hidden');
@@ -731,8 +899,10 @@ Scan bahan yang kamu punya
       resultContainer.innerHTML = '';
     }
 
-    function clearImage() {
-      stopCamera();
+    // Clears selected image state (preview, selected files) WITHOUT touching
+    // an installed camera stream. Used by toggleCamera so starting the camera
+    // doesn't invalidate its own request token.
+    function clearImageState() {
       submitBtn.lastChild.textContent = ' Cari Resep Sekarang';
       if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
       imagePreviewUrl = null;
@@ -752,74 +922,107 @@ Scan bahan yang kamu punya
       document.getElementById('recipeChooser').classList.remove('hidden');
     }
 
+    function clearImage() {
+      cancelActiveScan();
+      stopCamera();
+      clearImageState();
+    }
+
+    // Cancels any in-flight scan fetch and invalidates pending async work.
+    // Called on reset/retry so a stale response can never clobber new state.
+    function cancelActiveScan() {
+      scanRequestId++;
+      if (scanAbortController) {
+        scanAbortController.abort();
+        scanAbortController = null;
+      }
+    }
+
     async function handleSubmit() {
-      if (cameraStream) {
-        if (!cameraVideo.videoWidth) {
-          showError('Kamera belum siap. Tunggu sebentar lalu scan lagi.');
-          return;
-        }
-        const canvas = document.createElement('canvas');
-        const scale = Math.min(1, 1280 / cameraVideo.videoWidth);
-        canvas.width = Math.round(cameraVideo.videoWidth * scale);
-        canvas.height = Math.round(cameraVideo.videoHeight * scale);
-        canvas.getContext('2d').drawImage(cameraVideo, 0, 0, canvas.width, canvas.height);
-        const captured = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85));
-        if (!captured) {
-          showError('Gagal mengambil frame kamera. Coba lagi.');
-          return;
-        }
-        if (imageFiles.length >= 5) {
-          showError('Maksimal 5 foto. Hapus foto untuk mulai ulang.');
-          return;
-        }
-        imageFiles.push(captured);
-        // Full frame tetap dikirim agar bahan di tepi/tengah tidak terpotong.
-        // Empat crop bertumpang tindih membantu membaca bahan kecil yang tersebar.
-        if (imageFiles.length === 1 && canvas.width >= 700 && canvas.height >= 500) {
-          const cw = Math.round(canvas.width * 0.62);
-          const ch = Math.round(canvas.height * 0.62);
-          for (const [x, y] of [[0, 0], [canvas.width - cw, 0], [0, canvas.height - ch], [canvas.width - cw, canvas.height - ch]]) {
-            const crop = document.createElement('canvas');
-            crop.width = cw; crop.height = ch;
-            crop.getContext('2d').drawImage(canvas, x, y, cw, ch, 0, 0, cw, ch);
-            const blob = await new Promise(resolve => crop.toBlob(resolve, 'image/jpeg', 0.72));
-            if (blob) imageFiles.push(blob);
-          }
-        }
-        imageFile = captured;
-        document.getElementById('photoCount').textContent = `${imageFiles.length}/5 tampilan siap dianalisis (foto utuh + auto-crop).`;
-        stopCamera();
-        if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
-        imagePreviewUrl = URL.createObjectURL(captured);
-        previewImg.src = imagePreviewUrl;
-        previewImg.classList.remove('hidden');
-        submitBtn.lastChild.textContent = ' Cari Resep Sekarang';
-      }
-      if (!imageFile) {
-        showError('Buka kamera atau pilih foto bahan makanan terlebih dahulu.');
-        return;
-      }
-
-      submitBtn.classList.add('hidden');
-      clearBtn.classList.add('hidden');
-      loadingBox.classList.remove('hidden');
-      errorBox.classList.add('hidden');
-      tipsBox.classList.add('hidden');
-      resultContainer.innerHTML = '';
-      cameraBtn.disabled = true;
-      uploadBtn.disabled = true;
-
+      // Synchronous re-entrancy guard — the very first thing we do, BEFORE any
+      // await. Prevents double-submit from a double click/Enter.
+      if (isSubmitting) return;
+      isSubmitting = true;
+      const requestId = ++scanRequestId;
       try {
+        if (cameraStream) {
+          if (!cameraVideo.videoWidth) {
+            showError('Kamera belum siap. Tunggu sebentar lalu scan lagi.');
+            return;
+          }
+          const canvas = document.createElement('canvas');
+          const scale = Math.min(1, 1280 / cameraVideo.videoWidth);
+          canvas.width = Math.round(cameraVideo.videoWidth * scale);
+          canvas.height = Math.round(cameraVideo.videoHeight * scale);
+          canvas.getContext('2d').drawImage(cameraVideo, 0, 0, canvas.width, canvas.height);
+          const captured = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+          // A reset/retry may have fired while we awaited the blob. Bail out.
+          if (requestId !== scanRequestId) return;
+          if (!captured) {
+            showError('Gagal mengambil frame kamera. Coba lagi.');
+            return;
+          }
+          if (imageFiles.length >= UPLOAD_POLICY.maxFiles) {
+            showError('Maksimal ' + UPLOAD_POLICY.maxFiles + ' foto. Hapus foto untuk mulai ulang.');
+            return;
+          }
+          imageFiles.push(captured);
+          // Full frame tetap dikirim agar bahan di tepi/tengah tidak terpotong.
+          // Empat crop bertumpang tindih membantu membaca bahan kecil yang tersebar.
+          if (imageFiles.length === 1 && canvas.width >= 700 && canvas.height >= 500) {
+            const cw = Math.round(canvas.width * 0.62);
+            const ch = Math.round(canvas.height * 0.62);
+            for (const [x, y] of [[0, 0], [canvas.width - cw, 0], [0, canvas.height - ch], [canvas.width - cw, canvas.height - ch]]) {
+              const crop = document.createElement('canvas');
+              crop.width = cw; crop.height = ch;
+              crop.getContext('2d').drawImage(canvas, x, y, cw, ch, 0, 0, cw, ch);
+              const blob = await new Promise(resolve => crop.toBlob(resolve, 'image/jpeg', 0.72));
+              if (requestId !== scanRequestId) return;
+              if (blob) imageFiles.push(blob);
+            }
+          }
+          imageFile = captured;
+          document.getElementById('photoCount').textContent = `${imageFiles.length}/${UPLOAD_POLICY.maxFiles} tampilan siap dianalisis (foto utuh + auto-crop).`;
+          stopCamera();
+          if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+          imagePreviewUrl = URL.createObjectURL(captured);
+          previewImg.src = imagePreviewUrl;
+          previewImg.classList.remove('hidden');
+          submitBtn.lastChild.textContent = ' Cari Resep Sekarang';
+        }
+        if (!imageFile) {
+          showError('Buka kamera atau pilih foto bahan makanan terlebih dahulu.');
+          return;
+        }
+
+        submitBtn.classList.add('hidden');
+        clearBtn.classList.add('hidden');
+        loadingBox.classList.remove('hidden');
+        errorBox.classList.add('hidden');
+        tipsBox.classList.add('hidden');
+        resultContainer.innerHTML = '';
+        cameraBtn.disabled = true;
+        uploadBtn.disabled = true;
+
         const formData = new FormData();
         for (const file of imageFiles) formData.append('image', file, file.name || 'kamera.jpg');
+        // Privacy notice: default to NO cross-provider fallback. Photos are
+        // processed only by the preferred provider unless the user explicitly
+        // opts in to fallback (which may route images to additional providers).
+        formData.append('allowFallback', 'false');
+
+        // AbortController so a reset/retry cancels the in-flight request.
+        scanAbortController = new AbortController();
 
         // Panggil local proxy server (multi-provider dengan auto-fallback)
         const resp = await fetch('/api/scan-resep', {
           method: 'POST',
           body: formData,
+          signal: scanAbortController.signal,
         });
-
+        if (requestId !== scanRequestId) return;
         const data = await resp.json();
+        if (requestId !== scanRequestId) return;
 
         if (!resp.ok) {
           const msg = data?.error || 'Gagal memproses gambar. Coba lagi.';
@@ -838,6 +1041,8 @@ Scan bahan yang kamu punya
         cameraBtn.disabled = false;
         uploadBtn.disabled = false;
       } catch (err) {
+        // An aborted request is intentional (reset/retry) — swallow it.
+        if (err && err.name === 'AbortError') return;
         console.error(err);
         let msg = err.message || 'Gagal memproses gambar.';
         if (err.message && err.message.includes('Failed to fetch')) {
@@ -849,6 +1054,9 @@ Scan bahan yang kamu punya
         clearBtn.classList.remove('hidden');
         cameraBtn.disabled = false;
         uploadBtn.disabled = false;
+      } finally {
+        isSubmitting = false;
+        scanAbortController = null;
       }
     }
 
@@ -916,6 +1124,16 @@ Scan bahan yang kamu punya
                 </a>
               ` : ''}
               ${providerBadge ? `<div class="provider-line">${providerBadge}</div>` : ''}
+            </div>
+          </div>
+
+          <div class="card" style="border-color: var(--amber-border); background: var(--amber-bg);">
+            <div class="card-body" style="padding: 12px;">
+              <p class="missing-help" style="margin: 0;">
+                ⚠️ Keamanan pangan: hasil ini dibuat oleh AI dan bisa keliru. Selalu
+                cuci bahan, pastikan matang sempurna (terutama daging/telur), dan
+                cek alergi atau bahan yang kadaluarsa sebelum memasak.
+              </p>
             </div>
           </div>
 
@@ -1060,6 +1278,17 @@ Scan bahan yang kamu punya
         });
       }
       resultContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // Returns true only for URLs with a safe, http(s)-only scheme. Used before
+    // interpolating any dynamic URL into href/src so `javascript:`, `data:`,
+    // `vbscript:` etc. can never execute. Applies a strict allowlist rather than
+    // a blocklist so unknown schemes are rejected by default.
+    function safeUrl(url) {
+      if (url == null) return false;
+      const u = String(url).trim();
+      if (!u) return false;
+      return /^https:\/\//i.test(u);
     }
 
     function escapeHtml(str) {

@@ -1,11 +1,34 @@
+# ⚠️ NOT production-safe without authentication.
+# This deploys HOST=0.0.0.0 with PUBLIC_DEPLOYMENT=true, exposing the paid
+# /api/scan-resep endpoint (consumes AI provider quota) to anyone who reaches
+# it. Per-IP rate limiting and ALLOWED_HOSTS/ALLOWED_ORIGINS mitigate abuse but
+# are NOT a substitute for per-user auth. Do not point a production domain at
+# this service until authentication + per-user key isolation are added (see
+# README "Production / Deployment Caution").
 services:
   - type: web
     name: resepin-aja
     runtime: python
     plan: free
-    buildCommand: "true"
+    buildCommand: "python -m pip install -r requirements.txt"
     startCommand: python server.py
     healthCheckPath: /health
     envVars:
+      - key: HOST
+        value: "0.0.0.0"
+      - key: PUBLIC_DEPLOYMENT
+        value: "true"
+      - key: ALLOW_CROSS_PROVIDER_FALLBACK
+        value: "false"
+      - key: MAX_CONCURRENT_SCANS
+        value: "2"
       - key: GEMINI_API_KEY
         sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: THEMEALDB_API_KEY
+        sync: false
+      - key: ENABLE_EXTERNAL_RECIPES
+        value: "true"

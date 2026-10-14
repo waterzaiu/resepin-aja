@@ -85,7 +85,7 @@ const windowStub = {
 // helper functions. Evaluate in a sandbox via new Function with stubbed globals.
 const fn = new Function(
   'document', 'window', 'navigator', 'fetch',
-  script + '\n; return { recipeTiles, youtubeSearchLink, escapeHtml, renderResult };'
+  script + '\n; return { recipeTiles, youtubeSearchLink, escapeHtml, safeUrl, UPLOAD_POLICY, ALLOWED_IMAGE_TYPES, renderResult };'
 );
 
 let result;
@@ -158,5 +158,44 @@ const htmlOut2 = el.resultContainer.innerHTML;
 assert(!htmlOut2.includes('Belum ada resep tambahan'), 'empty-state should be absent');
 assert(htmlOut2.includes('Relevan: rice'), 'reason missing in alternatif tile');
 console.log('renderResult OK (menuAlternatif grid + reason)');
+
+// --- Test safeUrl rejects non-https / dangerous schemes ---
+assert(result.safeUrl('https://cookpad.com/id/resep/1') === true, 'https should pass');
+assert(result.safeUrl('https://evil.com/x') === true, 'https host-agnostic should pass');
+assert(result.safeUrl('javascript:alert(1)') === false, 'javascript: scheme must be rejected');
+assert(result.safeUrl('data:text/html,<script>') === false, 'data: scheme must be rejected');
+assert(result.safeUrl('vbscript:msgbox') === false, 'vbscript: scheme must be rejected');
+assert(result.safeUrl('  https://x/1  ') === true, 'trimmed https should pass');
+assert(result.safeUrl('http://x/1') === false, 'plain http should be rejected');
+assert(result.safeUrl('') === false, 'empty URL rejected');
+assert(result.safeUrl(null) === false, 'null URL rejected');
+console.log('safeUrl OK (https allowlist, dangerous schemes rejected)');
+
+// --- Test recipeTiles drops unsafe URLs (defense-in-depth on dynamic URLs) ---
+const unsafeTiles = result.recipeTiles([
+  { nama: 'Bad', thumbnail: 'https://x/1.jpg', url: 'javascript:alert(1)' },
+  { nama: 'Good', thumbnail: 'https://x/2.jpg', url: 'https://x/2' },
+]);
+assert(!unsafeTiles.includes('javascript:'), 'javascript: URL must not be rendered');
+assert(unsafeTiles.includes('Good'), 'safe https URL must still render');
+console.log('recipeTiles OK (unsafe dynamic URLs dropped)');
+
+// --- Test UPLOAD_POLICY constants are defined and sane ---
+const up = result.UPLOAD_POLICY;
+assert(up && up.maxFiles === 5, 'maxFiles must be 5');
+assert(up.maxBytesPerFile === 4 * 1024 * 1024, 'maxBytesPerFile must be 4 MB');
+assert(up.maxTotalBytes === 12 * 1024 * 1024, 'maxTotalBytes must be 12 MB');
+assert(up.maxDecodedPixels === 16 * 1000 * 1000, 'maxDecodedPixels must be 16M');
+assert(Array.isArray(result.ALLOWED_IMAGE_TYPES), 'ALLOWED_IMAGE_TYPES must be array');
+assert(result.ALLOWED_IMAGE_TYPES.includes('image/jpeg'), 'jpeg allowed');
+assert(result.ALLOWED_IMAGE_TYPES.includes('image/png'), 'png allowed');
+assert(result.ALLOWED_IMAGE_TYPES.includes('image/webp'), 'webp allowed');
+assert(!result.ALLOWED_IMAGE_TYPES.includes('image/gif'), 'gif must be excluded per policy');
+console.log('UPLOAD_POLICY OK (5 files / 4MB each / 12MB total / 16M pixels)');
+
+// --- Test renderResult includes food-safety notice ---
+assert(htmlOut.includes('Keamanan pangan'), 'food-safety notice missing');
+assert(htmlOut.includes('matang sempurna'), 'food-safety guidance missing');
+console.log('renderResult OK (food-safety notice present)');
 
 console.log('\nAll frontend harness checks passed.');

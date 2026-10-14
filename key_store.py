@@ -1,5 +1,11 @@
-"""Local Windows DPAPI key store. SHA-256 validates encrypted payload integrity."""
+"""Local Windows DPAPI key store. SHA-256 validates encrypted payload integrity.
+
+On Windows, DPAPI is called via ctypes (no pywin32 requirement); pywin32 is used
+if present. On non-Windows hosts, stored DPAPI entries are ignored with a
+sanitized warning so startup and environment-key use never crash.
+"""
 import base64
+import ctypes
 import hashlib
 import json
 import os
@@ -7,12 +13,90 @@ from pathlib import Path
 import sys
 
 if os.name == "nt":
-    import win32crypt
-else:
-    win32crypt = None
+    import ctypes.wintypes
 
 ROOT = Path(__file__).resolve().parent
 STORE = ROOT / ".api-keys.enc.json"
+
+
+def _win32_dpapi_protect(data):
+    import ctypes.wintypes
+
+    class DATA_BLOB(ctypes.Structure):
+        _fields_ = [
+            ("cbData", ctypes.wintypes.DWORD),
+            ("pbData", ctypes.POINTER(ctypes.c_char)),
+        ]
+
+    buf = ctypes.create_string_buffer(data, len(data))
+    in_blob = DATA_BLOB(len(data), ctypes.cast(buf, ctypes.POINTER(ctypes.c_char)))
+    out_blob = DATA_BLOB()
+    if not ctypes.windll.crypt32.CryptProtectData(
+        ctypes.byref(in_blob), None, None, None, None, 0, ctypes.byref(out_blob)
+    ):
+        raise OSError("CryptProtectData gagal")
+    try:
+        return ctypes.string_at(out_blob.pbData, out_blob.cbData)
+    finally:
+        ctypes.windll.kernel32.LocalFree(out_blob.pbData)
+
+
+def _win32_dpapi_unprotect(blob):
+    import ctypes.wintypes
+
+    class DATA_BLOB(ctypes.Structure):
+        _fields_ = [
+            ("cbData", ctypes.wintypes.DWORD),
+            ("pbData", ctypes.POINTER(ctypes.c_char)),
+        ]
+
+    buf = ctypes.create_string_buffer(blob, len(blob))
+    in_blob = DATA_BLOB(len(blob), ctypes.cast(buf, ctypes.POINTER(ctypes.c_char)))
+    out_blob = DATA_BLOB()
+    if not ctypes.windll.crypt32.CryptUnprotectData(
+        ctypes.byref(in_blob), None, None, None, None, 0, ctypes.byref(out_blob)
+    ):
+        raise OSError("CryptUnprotectData gagal")
+    try:
+        return ctypes.string_at(out_blob.pbData, out_blob.cbData)
+    finally:
+        ctypes.windll.kernel32.LocalFree(out_blob.pbData)
+
+
+def _try_pywin32():
+    try:
+        import win32crypt  # noqa: F401
+    except Exception:
+        return None
+
+    def protect(data):
+        import win32crypt
+        return win32crypt.CryptProtectData(data, None, None, None, None, 0)
+
+    def unprotect(blob):
+        import win32crypt
+        return win32crypt.CryptUnprotectData(blob, None, None, None, 0)[1]
+
+    return protect, unprotect
+
+
+_PYWIN32 = _try_pywin32() if os.name == "nt" else None
+
+
+def _protect(data):
+    if os.name != "nt":
+        raise RuntimeError("Penyimpanan terenkripsi CLI hanya tersedia di Windows; di Linux gunakan environment secret")
+    if _PYWIN32 is not None:
+        return _PYWIN32[0](data)
+    return _win32_dpapi_protect(data)
+
+
+def _unprotect(blob):
+    if os.name != "nt":
+        raise RuntimeError("Key terenkripsi DPAPI hanya dapat dibuka di Windows; pakai env var pada hosting Linux")
+    if _PYWIN32 is not None:
+        return _PYWIN32[1](blob)
+    return _win32_dpapi_unprotect(blob)
 
 
 def _read_store():
@@ -25,24 +109,42 @@ def _read_store():
 
 
 def load_key(provider):
+    """Return the locally stored key for ``provider``, or "" if absent/unusable.
+
+    On non-Windows hosts (e.g. Render/Linux) a stored DPAPI entry cannot be
+    decrypted; it is ignored with a sanitized warning so startup continues.
+    """
     entry = _read_store().get(provider)
     if not entry:
         return ""
-    if win32crypt is None:
-        raise RuntimeError("Key terenkripsi DPAPI hanya dapat dibuka oleh akun Windows asal; pakai env var pada hosting Linux")
-    encrypted = base64.b64decode(entry["ciphertext"], validate=True)
-    if hashlib.sha256(encrypted).hexdigest() != entry["sha256"]:
-        raise ValueError("Checksum key terenkripsi tidak cocok")
-    return win32crypt.CryptUnprotectData(encrypted, None, None, None, 0)[1].decode("utf-8")
+    if os.name != "nt":
+        sys.stderr.write(
+            "[key_store] Abaikan key lokal '%s' (DPAPI hanya untuk Windows). "
+            "Gunakan env var pada hosting Linux.\n" % provider
+        )
+        return ""
+    try:
+        encrypted = base64.b64decode(entry.get("ciphertext", ""), validate=True)
+    except (ValueError, TypeError):
+        sys.stderr.write("[key_store] Abaikan key lokal '%s': ciphertext tidak valid.\n" % provider)
+        return ""
+    if hashlib.sha256(encrypted).hexdigest() != entry.get("sha256"):
+        sys.stderr.write("[key_store] Abaikan key lokal '%s': checksum tidak cocok.\n" % provider)
+        return ""
+    try:
+        return _unprotect(encrypted).decode("utf-8")
+    except Exception:
+        sys.stderr.write("[key_store] Gagal membuka key lokal '%s' (DPAPI beda akun/mesin?).\n" % provider)
+        return ""
 
 
 def save_key(provider, key):
-    if win32crypt is None:
+    if os.name != "nt":
         raise RuntimeError("Penyimpanan terenkripsi CLI memerlukan Windows DPAPI; di Linux gunakan secret environment")
     if not key.strip():
         raise ValueError("API key kosong")
     data = _read_store()
-    encrypted = win32crypt.CryptProtectData(key.strip().encode("utf-8"), None, None, None, None, 0)
+    encrypted = _protect(key.strip().encode("utf-8"))
     data[provider] = {
         "ciphertext": base64.b64encode(encrypted).decode("ascii"),
         "sha256": hashlib.sha256(encrypted).hexdigest(),

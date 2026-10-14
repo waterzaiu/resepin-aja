@@ -20,12 +20,24 @@ sys.modules.setdefault("win32crypt", mock.MagicMock())
 _key_store = mock.MagicMock()
 _key_store.load_key.return_value = ""
 sys.modules["key_store"] = _key_store
+# Save the real recipe_sources module (if already imported) so we can restore
+# it after exec; otherwise running this test file in the same process as
+# test_recipe_sources_security.py would leak a MagicMock into sys.modules and
+# break that suite's `import recipe_sources`.
+_real_recipe_sources = sys.modules.get("recipe_sources")
 sys.modules["recipe_sources"] = mock.MagicMock()
 sys.modules["recipe_sources"].mixed_recipes = lambda *a, **k: []
 
 spec = importlib.util.spec_from_file_location("server_under_test", SERVER_PATH)
 server = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(server)
+
+# Restore the real recipe_sources module so other test files see the genuine
+# implementation, not our stub.
+if _real_recipe_sources is not None:
+    sys.modules["recipe_sources"] = _real_recipe_sources
+else:
+    sys.modules.pop("recipe_sources", None)
 
 
 class TestIngredientNormalization(unittest.TestCase):
