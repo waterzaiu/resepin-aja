@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: resepin-aja
+    runtime: python
+    plan: free
+    buildCommand: "true"
+    startCommand: python server.py
+    healthCheckPath: /health
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false

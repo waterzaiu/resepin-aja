@@ -855,7 +855,7 @@ def main():
 
     try:
         http.server.ThreadingHTTPServer.allow_reuse_address = True
-        with http.server.ThreadingHTTPServer(("127.0.0.1", PORT), Handler) as httpd:
+        with http.server.ThreadingHTTPServer(("0.0.0.0" if os.environ.get("RENDER") else "127.0.0.1", PORT), Handler) as httpd:
             try:
                 import subprocess
                 url = f"http://localhost:{PORT}"
