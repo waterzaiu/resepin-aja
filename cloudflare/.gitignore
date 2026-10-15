@@ -1,0 +1,9 @@
+# Local dev secrets and generated artifacts — never commit.
+.dev.vars
+.dev.vars.*
+.wrangler/
+node_modules/
+tmp/
+
+# Frontend copy for the ASSETS binding (regenerate with the README copy step).
+public/

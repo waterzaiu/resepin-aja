@@ -1,0 +1,44 @@
+{
+  // Cloudflare Workers (Free plan) deployment of "Resep in aja".
+  //
+  // See README.md for full deploy instructions, secrets, and limitations.
+  //
+  // `compatibility_date` pins the Workers runtime feature set (required).
+  // `main` is the Worker entry module (ESM).
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "resepin-aja-workers",
+  "main": "src/index.js",
+  "compatibility_date": "2024-09-23",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+
+  // Run the Worker first so HTML (including SPA fallbacks) receives CSP and
+  // camera permissions at the real delivery path. The Worker fetches ASSETS
+  // explicitly; API/health requests never fall through to the SPA.
+  //
+  // IMPORTANT: copy the frontend into `public/` before deploying:
+  //     mkdir -p public && cp ../resep-in-aja.html public/index.html
+  // The repo root is NOT used as the assets directory on purpose — it contains
+  // secrets (.api-keys.enc.json, .env) that must never be uploaded as assets.
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+    "not_found_handling": "single-page-application"
+  },
+
+  // Secrets are read from env at runtime and are NOT declared here.
+  // Cloudflare has no declarative "secrets" field in wrangler.jsonc — manage
+  // them with `wrangler secret put` (production) or a `.dev.vars` file (local
+  // dev). At least one AI vision key (GEMINI_API_KEY, OPENAI_API_KEY, or
+  // ANTHROPIC_API_KEY) enables /api/scan-resep; discovery/search/gallery work
+  // with zero keys. See README.md for the exact commands.
+
+  // Non-sensitive configuration. IMPORTANT: never put API keys here.
+  "vars": {
+    "PROVIDER": "auto",
+    "GEMINI_MODEL": "gemini-3.5-flash-lite",
+    "ALLOW_CROSS_PROVIDER_FALLBACK": "false",
+    "ENABLE_EXTERNAL_RECIPES": "true"
+  }
+}

@@ -24,6 +24,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+import time
 
 from ingredients import (
     canonicalize,
@@ -238,7 +239,10 @@ class TheMealDBRecipeProvider:
         # TheMealDB test key is '1'; embed as the path key segment per docs.
         url = f"{self.BASE}/{self.api_key}/{endpoint}.php?{qs}"
         req = urllib.request.Request(url, headers={"User-Agent": "ResepInAja/1.0"})
-        with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:
+        remaining = getattr(self, '_deadline', float('inf')) - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError('Recipe discovery deadline exceeded')
+        with urllib.request.urlopen(req, timeout=min(TIMEOUT_SECONDS, remaining)) as resp:
             return __import__("json").loads(resp.read().decode("utf-8"))
 
     def _lookup(self, meal_id):
@@ -250,6 +254,7 @@ class TheMealDBRecipeProvider:
     def search(self, ingredients, preferences=None):
         if not ENABLE_EXTERNAL:
             return []
+        self._deadline = time.monotonic() + TIMEOUT_SECONDS
         canonicals = normalize_ingredients(ingredients)
         mealdb_terms = {
             "egg": "egg", "chicken": "chicken", "potato": "potato",
@@ -275,8 +280,10 @@ class TheMealDBRecipeProvider:
                 continue
             try:
                 data = self._get("filter", {"i": term})
+            except TimeoutError:
+                break
             except (OSError, ValueError, urllib.error.URLError, urllib.error.HTTPError) as exc:
-                sys.stderr.write(f"TheMealDB filter error: {exc}\n")
+                sys.stderr.write(f"TheMealDB filter error: {type(exc).__name__}\n")
                 continue
             for meal in (data.get("meals") or [])[:4]:
                 mid = meal.get("idMeal")
@@ -290,8 +297,10 @@ class TheMealDBRecipeProvider:
                 continue
             try:
                 detail = self._lookup(mid)
+            except TimeoutError:
+                break
             except (OSError, ValueError, urllib.error.URLError, urllib.error.HTTPError) as exc:
-                sys.stderr.write(f"TheMealDB lookup error for {mid}: {exc}\n")
+                sys.stderr.write(f"TheMealDB lookup error: {type(exc).__name__}\n")
                 continue
             if not detail:
                 continue

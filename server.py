@@ -846,7 +846,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not query or len(query) > 80:
                 self.send_json({"error": "Kata kunci harus 1–80 karakter."}, status=400)
             else:
-                self.send_json({"recipes": mixed_recipes(query, search_cookpad, limit=20)})
+                cards = mixed_recipes(query, search_cookpad, limit=20)
+                if not cards:
+                    cards = lookup_recipe_cards([ingredient_query([query]) or query], [query])
+                self.send_json({"recipes": cards})
         elif self.path == "/api/viral":
             self.send_json({"recipes": [dict(card, recommended=i == 0) for i, card in enumerate(COOKPAD_RENDANG)]})
         elif self.path == "/api/inspirasi":
@@ -921,7 +924,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header(
             "Content-Security-Policy",
             "default-src 'self'; script-src 'self' 'unsafe-inline'; "
-            "style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; "
+            "style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; "
             "connect-src 'self'; frame-ancestors 'none'; object-src 'none'; "
             "base-uri 'self'; form-action 'self'",
         )
@@ -1356,6 +1359,8 @@ def lookup_recipe_cards(names, ingredients=()):
     """
     import urllib.parse
 
+    if not recipe_discovery.ENABLE_EXTERNAL:
+        return []
     names = names if isinstance(names, list) else []
     ingredients = ingredients if isinstance(ingredients, list) else []
     text = " ".join(str(item).lower() for item in ingredients)
@@ -1373,7 +1378,7 @@ def lookup_recipe_cards(names, ingredients=()):
             with urllib.request.urlopen(url, timeout=3) as response:
                 return json.load(response).get("meals") or []
         except (OSError, ValueError) as exc:
-            sys.stderr.write(f"Pencarian resep gagal: {exc}\n")
+            sys.stderr.write(f"Pencarian resep gagal: {type(exc).__name__}\n")
             return []
 
     urls = [f"https://www.themealdb.com/api/json/v1/1/search.php?s={urllib.parse.quote(name.strip()[:80])}"
@@ -1399,6 +1404,10 @@ def lookup_recipe_cards(names, ingredients=()):
             if len(cards) == 6:
                 break
 
+    # An inspiration gallery has no ingredient constraint. Do not pass it to
+    # rank_cards, which intentionally rejects an empty ingredient list.
+    if not ingredients:
+        return cards
     # Filter relevansi: hanya kartu yang judulnya cocok dengan keyword bahan.
     ranked = rank_cards(cards, ingredients)
     if ranked:
@@ -1517,7 +1526,8 @@ def search_discovery(query):
             r.get("title", ""), r.get("cuisine", ""), r.get("country", ""),
             r.get("description", ""),
         ]).lower()
-        if query in hay:
+        ingredient_names = {i['canonical'] for i in r.get('ingredients', [])}
+        if query in hay or _ingredients.canonicalize(query) in ingredient_names:
             out.append(r)
     return out[:20]
 

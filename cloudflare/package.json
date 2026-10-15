@@ -1,0 +1,15 @@
+{
+  "name": "resepin-aja-workers",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cloudflare Workers (Free) deployment of Resep in aja — deterministic discovery/search/gallery + AI scan proxy. No external runtime deps.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "test": "node --test test/*.test.js",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.151.0"
+  }
+}

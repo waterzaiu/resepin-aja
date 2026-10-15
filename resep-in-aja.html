@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Resep in aja — Zero-Waste Fridge AI</title>
+  <title>Resep in aja — Dari bahan jadi hidangan</title>
   <meta name="description" content="Ubah sisa bahan makanan jadi resep masakan Indonesia. Purwarupa hackathon Sustainability." />
   <style>
     *, *::before, *::after { box-sizing: border-box; }
@@ -233,8 +233,67 @@
     .recipe-tile { display: block; overflow: hidden; border: 1px solid #292524; border-radius: 12px; color: var(--fg); text-decoration: none; background: #fff; transition: transform .15s, box-shadow .15s; }
     .recipe-tile:hover, .recipe-tile:focus-visible { transform: translateY(-2px); box-shadow: 0 4px 0 #292524; }
     .recipe-tile img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; background: var(--amber-bg); }
+    .recent-noimg {
+      width: 100%; aspect-ratio: 4 / 3;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--amber-bg); font-size: 40px; line-height: 1;
+    }
     .recipe-tile span { display: block; padding: 10px; font-size: 13px; font-weight: 600; }
     .recipe-tile small { display: block; padding: 0 10px 10px; color: var(--muted); }
+
+    /* Manual discovery results: single full-width column inside the input
+       card (never the 3-col gallery grid, which collapses to ~100px per
+       cell in the ~360px sidebar and word-wraps/clips every line). */
+    .discovery-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-top: 12px; }
+    .discovery-card {
+      display: block; width: 100%; text-decoration: none; color: var(--fg);
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; overflow: hidden; box-shadow: var(--shadow);
+      transition: transform .15s, box-shadow .15s;
+    }
+    a.discovery-card:hover, a.discovery-card:focus-visible {
+      transform: translateY(-2px); box-shadow: 0 6px 16px rgba(194, 65, 12, 0.14);
+      border-color: var(--amber-border);
+    }
+    .discovery-card .discovery-media {
+      display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover;
+      background: var(--amber-bg); border-radius: 0;
+    }
+    .discovery-card .discovery-body { padding: 12px 14px 14px; }
+    .discovery-card .discovery-title {
+      display: block; margin: 0 0 4px; font-size: 15px; font-weight: 700;
+      line-height: 1.35; color: var(--fg); word-break: break-word;
+    }
+    .discovery-card .discovery-source {
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+      font-size: 12px; color: var(--muted); margin: 0 0 6px;
+    }
+    .discovery-card .discovery-source .src-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--primary); flex-shrink: 0; }
+    .discovery-card .discovery-attrib {
+      display: block; font-size: 11px; color: #78716c; line-height: 1.5;
+      border-top: 1px dashed #e7e5e4; padding-top: 8px; margin-top: 4px;
+      word-break: break-word;
+    }
+    .discovery-card .discovery-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+    .discovery-card .discovery-badge {
+      display: inline-flex; align-items: center; font-size: 11px; font-weight: 600;
+      padding: 2px 8px; border-radius: 999px; background: #ffedd5; color: var(--primary);
+      border: 1px solid var(--amber-border);
+    }
+    .discovery-card .discovery-line { display: block; font-size: 12px; color: var(--muted); line-height: 1.5; }
+    .discovery-card .discovery-line strong { color: var(--fg); }
+    .discovery-score { display: block; font-size: 12px; font-weight: 700; color: var(--primary); margin-bottom: 6px; }
+    .discovery-warning {
+      display: flex; gap: 10px; align-items: flex-start;
+      margin: 8px 0 0; padding: 10px 12px;
+      border: 1px solid var(--amber-border); border-radius: 10px;
+      background: var(--amber-bg); color: #92400e; font-size: 13px; line-height: 1.5;
+    }
+    .discovery-warning .warn-icon { flex-shrink: 0; font-size: 16px; line-height: 1.4; }
+    @media (max-width: 640px) {
+      .discovery-card .discovery-media { aspect-ratio: 16 / 10; }
+      .discovery-card .discovery-body { padding: 10px 12px 12px; }
+    }
     .page-tabs { display:flex; gap:8px; margin: 18px 0; flex-wrap:wrap; }
     .page-tabs button { border:1px solid #292524; border-radius: 999px; padding: 9px 17px; background:#fff; color:#292524; cursor:pointer; font:inherit; font-weight:600; }
     .page-tabs button.active { background:#292524; color:#fff; }
@@ -346,12 +405,128 @@
       to { opacity: 1; transform: translateY(0); }
     }
 
-    @media (max-width: 480px) {
-      .hero h1 { font-size: 26px; }
-      .stats { gap: 8px; }
-      .stat { padding: 10px 8px; }
-      .btn-row { gap: 8px; }
-      main { padding: 16px 12px; }
+    /* Cookbook edition. Keep interaction classes and the single-column
+       discovery results intact; layout follows the document reading order. */
+    :root {
+      --bg:#f6f0e4; --card:#fffaf0; --fg:#26231f; --muted:#625a50;
+      --primary:#b33723; --primary-hover:#89291b; --border:#26231f;
+      --amber-bg:#eee4d2; --amber-border:#a58a64; --shadow:none;
+    }
+    body { background:var(--bg); line-height:1.5; }
+    header { position:static; background:var(--bg); border-bottom:1px solid var(--fg); backdrop-filter:none; -webkit-backdrop-filter:none; }
+    .header-inner { padding:20px 32px; }
+    .logo { gap:12px; }
+    .logo-icon { background:transparent; color:var(--primary); border:1px solid var(--fg); border-radius:0; width:44px; height:44px; }
+    .logo-title { font:700 25px/1.1 Georgia, 'Times New Roman', serif; color:var(--fg); }
+    .logo-sub { margin-top:5px; font-size:11px; letter-spacing:.1em; color:var(--muted); }
+    .badge-sus { background:transparent; border:0; border-radius:0; color:var(--muted); font-size:12px; }
+    main { padding:0 32px 64px; }
+    .page-tabs { position:static; margin:0 0 32px; padding:0; gap:28px; border-bottom:1px solid var(--fg); justify-content:flex-start; }
+    .page-tabs button { min-height:52px; flex:none; color:var(--muted); }
+    .page-tabs button.active { color:var(--primary); box-shadow:inset 0 -3px var(--primary); }
+    #scanPage { display:grid; grid-template-columns:minmax(0,360px) minmax(0,1fr); gap:32px; align-items:start; }
+    .hero { grid-column:1 / -1; padding:18px 0 30px; border-bottom:1px solid var(--fg); }
+    .hero-chip { padding:0; border-radius:0; background:none; color:var(--primary); font-size:12px; letter-spacing:.13em; text-transform:uppercase; margin-bottom:16px; }
+    .hero-chip svg { display:none; }
+    .hero h1 { max-width:1000px; font:400 clamp(36px,5.4vw,70px)/1.06 Georgia, 'Times New Roman', serif; letter-spacing:-.025em; margin:0 0 20px; }
+    .hero h1 .accent { font-style:italic; }
+    .hero p { max-width:560px; font-size:16px; line-height:1.65; }
+    .stats { display:flex; flex-wrap:wrap; gap:8px; margin-top:20px; }
+    .stat { padding:0; background:none; border:0; }
+    .stat-label { font-size:12px; font-weight:500; }
+    .stat:not(:last-child)::after { color:var(--primary); }
+    #inputCard { grid-column:1; grid-row:auto; width:100%; margin:0; }
+    #resultContainer { grid-column:2; min-width:0; }
+    #resultContainer:empty { display:none; }
+    #recipeChooser { grid-column:2; margin:0; min-width:0; }
+    .card { background:var(--card); border:1px solid var(--fg); border-radius:2px; box-shadow:none; overflow:visible; }
+    .card-header { padding:18px; border-bottom:1px solid var(--fg); }
+    .card-title { font:400 23px/1.2 Georgia, 'Times New Roman', serif; color:var(--fg); }
+    .card-title svg { display:none; }
+    .card-body { padding:18px; }
+    .preview-area { aspect-ratio:16/9; border:1px dashed #807466; border-radius:0; background:var(--bg); }
+    .preview-area:has(video:not(.hidden)), .preview-area:has(img:not(.hidden)) { aspect-ratio:4/3; }
+    .preview-empty { padding:16px; }
+    .preview-empty svg { width:26px; height:26px; color:var(--primary); margin-bottom:0; }
+    .preview-empty .small { font-size:12px; color:var(--muted); }
+    .preview-clear { width:44px; height:44px; border-radius:2px; }
+    .btn { min-height:44px; border-radius:2px; border-color:var(--fg); padding:10px 14px; transition:background .15s; }
+    .btn-primary, .btn-green { background:var(--primary); color:white; }
+    .btn-primary:hover:not(:disabled), .btn-green:hover:not(:disabled) { background:var(--primary-hover); }
+    .btn:hover:not(:disabled) { transform:none; }
+    .btn-outline { background:var(--card); color:var(--fg); border-color:var(--fg); }
+    .btn-row { gap:8px; }
+    input, select { min-height:44px; max-width:100%; color:var(--fg); background:var(--card); }
+    #manualIngredients, #recipeQuery, #filterCuisine, #filterDiet, #filterMaxTime { border-radius:2px !important; font-size:16px !important; }
+    #manualForm > div:first-child { flex-direction:column; }
+    #manualFilters { gap:10px !important; align-items:stretch !important; }
+    #manualFilters label { display:flex; flex-direction:column; flex:1 1 120px; gap:4px; min-width:0; }
+    #manualFilters select, #filterMaxTime { width:100% !important; }
+    .manual-label { display:block; font-weight:600; margin-bottom:8px; }
+    .field-help { font-size:12px; color:var(--muted); margin:0; }
+    .tips { background:none; padding:12px 0 0; border-top:1px solid #b9ad9c; border-radius:0; color:var(--muted); }
+    .tips strong, .footer-inner strong { color:var(--fg); }
+    .tips ul { padding-left:16px; }
+    .privacy-note { color:var(--muted) !important; }
+    .recipe-chooser h2, #recipeChooser h2, #viralPage h2 { font:400 clamp(28px,3vw,38px)/1.15 Georgia, 'Times New Roman', serif; letter-spacing:-.02em; margin:0 0 10px; }
+    .recipe-chooser p { line-height:1.6; max-width:620px; }
+    #recipeSearch { flex-wrap:wrap; }
+    #recipeSearch input { flex-basis:180px; background:var(--card); }
+    #recipeSearch button { width:auto; min-width:72px; }
+    .recipe-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px 18px; }
+    #viralGallery { grid-template-columns:repeat(3,minmax(0,1fr)); }
+    .recipe-tile { min-width:0; border:1px solid var(--fg); border-radius:2px; box-shadow:none; background:var(--card); }
+    .recipe-tile img { aspect-ratio:4/3; border-bottom:1px solid var(--fg); }
+    .recipe-tile span { padding:14px 14px 8px; font:400 23px/1.2 Georgia, 'Times New Roman', serif; overflow-wrap:anywhere; }
+    .recipe-tile small { padding:0 14px 14px; font-size:12px; color:var(--muted); }
+    .recipe-tile:hover, .recipe-tile:focus-visible, a.discovery-card:hover, a.discovery-card:focus-visible { transform:none; box-shadow:none; border-color:var(--primary); }
+    .recipe-tile:hover span { color:var(--primary); text-decoration:underline; text-underline-offset:4px; }
+    .discovery-card { border-radius:2px; box-shadow:none; }
+    .discovery-card .discovery-body { display:block; }
+    .discovery-card .discovery-title { font:400 22px/1.25 Georgia, 'Times New Roman', serif; }
+    .discovery-card .discovery-attrib { color:var(--muted); }
+    .discovery-badge, .discovery-warning, .loading-box, .error-box, .recommend-tag { border-radius:2px; }
+    .recommend-tag { background:var(--amber-bg); color:var(--fg); }
+    .result-header { background:var(--fg); }
+    .result-title { font:400 36px/1.15 Georgia, 'Times New Roman', serif; }
+    .loading-title { color:var(--fg); }
+    footer { background:var(--bg); border-top:1px solid var(--fg); backdrop-filter:none; padding:24px 32px; }
+    .footer-inner { text-align:left; }
+    :focus-visible, #recipeQuery:focus { outline:3px solid var(--primary); outline-offset:3px; }
+    #resultContainer, #recipeChooser { scroll-margin-top:24px; }
+    @media (max-width:900px) {
+      .header-inner { padding:18px 24px; }
+      main { padding:0 24px 48px; }
+      #scanPage { grid-template-columns:minmax(0,1fr); gap:28px; }
+      #inputCard, #recipeChooser, #resultContainer { grid-column:1; }
+      #scanPage > * { width:100%; }
+      .hero { padding:12px 0 24px; }
+      .hero h1 { font-size:clamp(36px,7vw,60px); }
+      .preview-area { max-height:240px; }
+      .preview-area:has(video:not(.hidden)), .preview-area:has(img:not(.hidden)) { max-height:none; }
+      #manualForm > div:first-child { flex-direction:row; }
+      .badge-sus { display:none; }
+      #viralGallery { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    }
+    @media (max-width:480px) {
+      .header-inner { padding:16px; }
+      main { padding:0 16px 40px; }
+      .page-tabs { margin:0 0 20px; gap:24px; }
+      .page-tabs button { font-size:14px; }
+      .hero h1 { font-size:38px; }
+      .hero h1 br { display:none; }
+      .hero p { font-size:15px; }
+      .card-header, .card-body { padding:16px; }
+      #manualForm > div:first-child { flex-direction:column; }
+      #recipeSearch input { flex-basis:100%; }
+      #recipeSearch button { width:100%; }
+      .recipe-grid, #viralGallery { grid-template-columns:minmax(0,1fr); }
+      .recipe-tile span { font-size:25px; }
+      .btn-row { grid-template-columns:minmax(0,1fr); }
+      footer { padding:20px 16px; }
+    }
+    @media (prefers-reduced-motion:reduce) {
+      *, *::before, *::after { animation:none !important; transition:none !important; scroll-behavior:auto !important; }
     }
   </style>
 </head>
@@ -367,7 +542,7 @@
         </div>
         <div class="logo-text">
           <div class="logo-title">Resep in aja</div>
-          <div class="logo-sub">Zero-Waste Fridge AI</div>
+          <div class="logo-sub">Dari bahan jadi hidangan</div>
         </div>
       </div>
       <span class="badge-sus">
@@ -375,15 +550,15 @@
           <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19.2 2.96c1.4 9.3-3.2 12.8-8.2 13.4"/>
           <path d="M2 21c0-3 1.85-5.36 5.08-6"/>
         </svg>
-        Sustainability
+        Masak dari yang ada
       </span>
     </div>
   </header>
 
   <main>
     <nav class="page-tabs" aria-label="Navigasi resep">
-      <button id="tabScan" class="active" type="button">Scan Bahan</button>
-      <button id="tabViral" type="button">Viral Foodies</button>
+      <button id="tabScan" class="active" type="button" aria-controls="scanPage">Bahan &amp; resep</button>
+      <button id="tabViral" type="button" aria-controls="viralPage">Resep Terbaru</button>
     </nav>
     <section id="scanPage">
     <section class="hero" id="hero">
@@ -391,10 +566,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3z"/>
         </svg>
-        Hackathon Prototype · Food Waste Reduction
+        Catatan dapur sehari-hari
       </div>
-      <h1>Isi kulkas seadanya.<br /><span class="accent">Ide masaknya banyak.</span></h1>
-      <p>Foto satu atau beberapa bahan, lalu temukan resep yang bisa kamu coba. Atau langsung jelajahi ide masakan di bawah.</p>
+      <h1>Isi kulkas seadanya.<br /> <span class="accent">Ide masaknya banyak.</span></h1>
+      <p>Mulai dari bahan yang ada. Foto atau tulis isinya, lalu pilih resep untuk meja makan hari ini.</p>
       <div class="stats">
         <div class="stat">
           <div class="stat-icon">
@@ -403,7 +578,7 @@
               <circle cx="12" cy="13" r="4"/>
             </svg>
           </div>
-          <div class="stat-label">Foto Bahan</div>
+          <div class="stat-label">01 · Pilih bahan</div>
         </div>
         <div class="stat">
           <div class="stat-icon">
@@ -411,7 +586,7 @@
               <path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3L12 3z"/>
             </svg>
           </div>
-          <div class="stat-label">AI Identifikasi</div>
+          <div class="stat-label">02 · Temukan resep</div>
         </div>
         <div class="stat">
           <div class="stat-icon">
@@ -420,7 +595,7 @@
               <line x1="6" y1="17" x2="18" y2="17"/>
             </svg>
           </div>
-          <div class="stat-label">Resep Siap</div>
+          <div class="stat-label">03 · Ayo masak</div>
         </div>
       </div>
     </section>
@@ -433,7 +608,7 @@
             <path d="M2 6h20"/>
             <path d="M2 18h20"/>
           </svg>
-Scan bahan yang kamu punya
+Apa isi kulkasmu?
         </h2>
       </div>
       <div class="card-body">
@@ -470,7 +645,7 @@ Scan bahan yang kamu punya
               <polyline points="17 8 12 3 7 8"/>
               <line x1="12" y1="3" x2="12" y2="15"/>
             </svg>
-            Upload
+            Unggah foto
           </button>
         </div>
 
@@ -482,13 +657,13 @@ Scan bahan yang kamu punya
         </button>
 
         <p id="photoCount" aria-live="polite" style="font-size:13px; margin:8px 0;"></p>
-        <div class="loading-box hidden" id="loadingBox">
+        <div class="loading-box hidden" id="loadingBox" role="status">
           <div class="spinner"></div>
           <p class="loading-title">AI sedang memproses bahan makananmu...</p>
           <p class="loading-sub">Identifikasi bahan &amp; cari resep paling cocok (±10-20 detik)</p>
         </div>
 
-        <div class="error-box hidden" id="errorBox" style="margin-top: 12px;">
+        <div class="error-box hidden" id="errorBox" role="alert" style="margin-top: 12px;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
             <line x1="12" y1="9" x2="12" y2="13"/>
@@ -508,11 +683,10 @@ Scan bahan yang kamu punya
         </div>
 
         <div class="tips" id="tipsBox" style="margin-top: 12px;">
-          <strong>Tips foto yang baik:</strong>
+          <strong>Sebelum memotret</strong>
           <ul>
-            <li>Pastikan bahan terlihat jelas dan tidak tertumpuk</li>
-            <li>Pencahayaan cukup (hindari foto gelap)</li>
-            <li>Boleh beberapa bahan sekaligus dalam satu foto</li>
+            <li>Letakkan bahan terpisah di tempat terang.</li>
+            <li>Beberapa bahan boleh dalam satu foto.</li>
           </ul>
           <p class="privacy-note" style="margin-top: 10px; font-size: 0.8rem; color: #78716c; border-top: 1px dashed #d6d3d1; padding-top: 10px;">
             🔒 Privasi: foto bahanmu hanya diproses oleh penyedia AI pilihan
@@ -522,12 +696,13 @@ Scan bahan yang kamu punya
         </div>
 
         <div class="manual-entry" style="margin-top: 16px; border-top: 1px dashed #a8a29e; padding-top: 16px;">
-          <strong style="display:block; margin-bottom: 8px;">Atau masukkan bahan manual</strong>
+          <label class="manual-label" for="manualIngredients">Atau tulis bahanmu</label>
           <form id="manualForm" style="display:flex; flex-direction:column; gap:10px;">
             <div style="display:flex; gap:8px;">
-              <input id="manualIngredients" type="text" placeholder="Contoh: telur, nasi, bawang putih, kecap manis" aria-label="Bahan manual" style="flex:1;min-width:0;border:1px solid #292524;border-radius:9px;padding:10px;font:inherit" />
+              <input id="manualIngredients" type="text" placeholder="Telur, nasi, bawang putih" aria-label="Bahan manual" aria-describedby="manualHelp" style="flex:1;min-width:0;border:1px solid #292524;border-radius:9px;padding:10px;font:inherit" />
               <button type="submit" class="btn btn-green">Cari Resep</button>
             </div>
+            <p class="field-help" id="manualHelp">Pisahkan bahan dengan koma. Sesuaikan filter bila perlu.</p>
             <div id="manualFilters" class="filters" style="display:flex; flex-wrap:wrap; gap:12px; align-items:center; font-size:13px;">
               <label>Masakan:
                 <select id="filterCuisine" style="border:1px solid #292524;border-radius:7px;padding:5px;font:inherit">
@@ -563,8 +738,8 @@ Scan bahan yang kamu punya
 
     <div id="resultContainer"></div>
     <section class="recipe-chooser" id="recipeChooser">
-      <h2>Pilih Inspirasi Masakan</h2>
-      <p>Jelajahi resep bergambar dari Cookpad, atau scan bahanmu untuk saran lebih relevan. Resep tautan dapat membutuhkan bahan tambahan.</p>
+      <h2>Mau masak apa hari ini?</h2>
+      <p>Jelajahi resep, buka sumbernya, lalu cek bahan yang masih kurang.</p>
       <form id="recipeSearch" style="display:flex;gap:8px;margin-bottom:18px">
         <input id="recipeQuery" type="search" placeholder="Cari resep atau bahan: telur tempe, ayam, kangkung..." aria-label="Cari resep" style="flex:1;min-width:0;border:1px solid #292524;border-radius:9px;padding:10px;font:inherit" />
         <button type="submit" class="btn btn-green">Cari</button>
@@ -573,8 +748,8 @@ Scan bahan yang kamu punya
     </section>
     </section>
     <section id="viralPage" class="recipe-chooser hidden">
-      <h2>Viral Foodies ✨</h2>
-      <p>Inspirasi kreasi mi yang sering dibagikan sebagai food hack. Pilihan dari resep Cookpad; bukan daftar tren TikTok real-time. Cek bahan tambahan di resep aslinya.</p>
+      <h2>Terbaru dari dapur detikFood</h2>
+      <p>Resep dan kabar kuliner menurut tanggal terbit, bukan peringkat popularitas. Buka artikel untuk membaca selengkapnya.</p>
       <div class="recipe-grid" id="viralGallery" aria-live="polite">Memuat resep...</div>
     </section>
   </main>
@@ -692,6 +867,7 @@ Scan bahan yang kamu punya
           // Playback failed even though the stream was acquired: stop it so we
           // don't leak a muted/stuck track, then surface the error.
           stopCamera();
+          clearImageState();
           showError('Kamera tidak bisa ditampilkan. Izinkan akses kamera atau gunakan Upload.');
           return;
         }
@@ -725,13 +901,18 @@ Scan bahan yang kamu punya
       return 'https://www.youtube.com/results?search_query=' + encodeURIComponent('resep ' + q);
     }
 
+    let galleryRequest = 0;
     async function loadGallery() {
+      const request = ++galleryRequest;
       const gallery = document.getElementById('recipeGallery');
       try {
         const response = await fetch('/api/inspirasi');
         if (!response.ok) throw new Error('Katalog gagal dimuat');
-        gallery.innerHTML = recipeTiles((await response.json()).recipes) || 'Belum ada resep tersedia. Coba scan bahanmu.';
+        const data = await response.json();
+        if (request !== galleryRequest) return;
+        gallery.innerHTML = recipeTiles(data.recipes) || 'Belum ada resep tersedia. Coba scan bahanmu.';
       } catch (err) {
+        if (request !== galleryRequest) return;
         gallery.textContent = 'Katalog belum bisa dimuat. Coba refresh halaman.';
       }
     }
@@ -740,13 +921,17 @@ Scan bahan yang kamu punya
       event.preventDefault();
       const query = document.getElementById('recipeQuery').value.trim();
       if (!query) return loadGallery();
+      const request = ++galleryRequest;
       const gallery = document.getElementById('recipeGallery');
       gallery.textContent = 'Mencari resep...';
       try {
         const response = await fetch('/api/resep?q=' + encodeURIComponent(query));
         if (!response.ok) throw new Error('Pencarian gagal');
-        gallery.innerHTML = recipeTiles((await response.json()).recipes) || 'Tidak ada resep. Coba kata kunci lain.';
+        const data = await response.json();
+        if (request !== galleryRequest) return;
+        gallery.innerHTML = recipeTiles(data.recipes) || 'Tidak ada resep. Coba kata kunci lain.';
       } catch (err) {
+        if (request !== galleryRequest) return;
         gallery.textContent = 'Pencarian gagal. Coba lagi.';
       }
     });
@@ -754,12 +939,14 @@ Scan bahan yang kamu punya
     let viralLoaded = false;
 
     // --- Manual ingredient entry (deterministic discovery, no AI needed) ---
+    let manualRequest = 0;
     document.getElementById('manualForm').addEventListener('submit', async (event) => {
       event.preventDefault();
       const text = document.getElementById('manualIngredients').value.trim();
       if (!text) return;
       const ingredients = text.split(',').map(s => s.trim()).filter(Boolean);
       if (!ingredients.length) return;
+      const request = ++manualRequest;
       const results = document.getElementById('manualResults');
       results.innerHTML = '<p style="font-size:13px;color:#57534e;">Mencari resep yang cocok...</p>';
       const preferences = {
@@ -774,12 +961,14 @@ Scan bahan yang kamu punya
           body: JSON.stringify({ ingredients, preferences }),
         });
         const data = await resp.json();
+        if (request !== manualRequest) return;
         if (!resp.ok) {
           results.innerHTML = '<p style="font-size:13px;color:#b91c1c;">' + escapeHtml(data.error || 'Gagal mencari resep.') + '</p>';
           return;
         }
         renderDiscoveryResults(results, data);
       } catch (err) {
+        if (request !== manualRequest) return;
         console.error(err);
         results.innerHTML = '<p style="font-size:13px;color:#b91c1c;">Tidak bisa terhubung ke server.</p>';
       }
@@ -787,36 +976,75 @@ Scan bahan yang kamu punya
 
     function renderDiscoveryResults(container, data) {
       const recipes = (data && data.recipes) || [];
+      const aiResults = (data && data.ai_results) || [];
       const sourceLabel = (data && data.source) || 'unknown';
       const fallback = !!(data && data.fallback);
+      // Manual matching can legitimately return zero deterministic recipes when
+      // the user enters only one or two ingredients (the backend scoring
+      // threshold requires enough overlap). In that case the backend may still
+      // supply `ai_results` fallback cards (shape: {title, image_url,
+      // source_url, source_name, attribution_text}) — render those instead of a
+      // dead-end so a sparse manual search still yields something useful.
+      const warnBox = (msg) => `<div class="discovery-warning" role="status"><span class="warn-icon">⚠️</span><span>${escapeHtml(msg)}</span></div>`;
+      const sourceLine = (name) => `<span class="discovery-source"><span class="src-dot"></span>Sumber: ${escapeHtml(name)}</span>`;
       if (!recipes.length) {
-        container.innerHTML = '<p style="font-size:13px;color:#57534e;">Tidak ada resep cocok untuk bahan tersebut. Coba tambah bahan atau kurangi filter.</p>';
+        const cards = aiResults.filter(c => c && c.title);
+        if (cards.length) {
+          let aiHtml = warnBox('Pencocokan bahan tidak menemukan resep pasti; menampilkan saran terkait (mungkin kurang akurat).');
+          aiHtml += '<div class="discovery-grid">';
+          for (const c of cards) {
+            const safeHref = safeUrl(c.source_url) ? escapeHtml(c.source_url) : '';
+            const img = safeUrl(c.image_url) ? `<img class="discovery-media" src="${escapeHtml(c.image_url)}" alt="" loading="lazy" />` : '';
+            const title = escapeHtml(c.title);
+            const source = c.source_name || c.source || sourceLabel;
+            const attrib = c.attribution_text ? `<span class="discovery-attrib">${escapeHtml(c.attribution_text)}</span>` : '';
+            const body = img + '<span class="discovery-body">'
+              + `<span class="discovery-title">${title}${safeHref ? ' ↗' : ''}</span>`
+              + sourceLine(source) + attrib + '</span>';
+            aiHtml += safeHref
+              ? `<a class="discovery-card" href="${safeHref}" target="_blank" rel="noopener noreferrer">${body}</a>`
+              : `<div class="discovery-card">${body}</div>`;
+          }
+          aiHtml += '</div>';
+          container.innerHTML = aiHtml;
+          return;
+        }
+        const warning = (data && data.fallback_warning) ? escapeHtml(data.fallback_warning) : '';
+        container.innerHTML = '<p style="font-size:13px;color:#57534e;">'
+          + (warning ? `<strong>${warning}</strong><br>` : '')
+          + 'Tidak ada resep yang cocok untuk bahan tersebut. Coba tambahkan bahan lain atau kurangi filter (masakan, diet, waktu).</p>';
         return;
       }
       let html = '';
       if (fallback) {
-        html += '<div class="warning-box" style="margin:8px 0;padding:10px 12px;border:1px solid #f59e0b;border-radius:8px;background:#fffbeb;font-size:13px;color:#92400e;">'
-          + '⚠️ Katalog utama tidak menghasilkan cukup hasil; menampilkan saran AI (mungkin kurang akurat).</div>';
+        html += warnBox(data.ai_generated === true
+          ? 'Menampilkan saran AI; periksa bahan dan petunjuk sebelum memasak.'
+          : 'Katalog utama tidak menghasilkan cukup hasil; menampilkan resep terkait dari sumber eksternal.');
       }
-      html += '<div class="recipe-grid" style="margin-top:10px;">';
+      html += '<div class="discovery-grid">';
       for (const r of recipes) {
         const missing = (r.missingIngredients || []).slice(0, 4);
         const badges = [];
-        if (r.cuisine) badges.push(escapeHtml(r.cuisine));
+        if (r.cuisine) badges.push(r.cuisine);
         const diets = r.diet_tags || r.dietTags || [];
-        if (diets.length) badges.push(escapeHtml(diets.join(', ')));
+        if (diets.length) badges.push(diets.join(', '));
         const totalMin = r.total_minutes != null ? r.total_minutes : ((r.prep_minutes || 0) + (r.cook_minutes || 0));
-        if (totalMin) badges.push(escapeHtml(String(totalMin)) + ' mnt');
-        const source = escapeHtml(r.source_name || r.sourceName || r.source || sourceLabel);
-        html += '<div class="recipe-tile manual-tile" style="display:block;text-decoration:none;border:1px solid #e7e5e4;border-radius:10px;padding:12px;">'
-          + '<b>' + escapeHtml(r.title || r.nama || 'Resep') + '</b>'
-          + '<small>Skor kecocokan: ' + Math.round((r.matchScore || 0) * 100) + '%</small>'
-          + '<small>Bahan terpenuhi: ' + escapeHtml((r.matchedIngredients || []).join(', ')) + '</small>'
-          + (missing.length ? '<small>Kurang: ' + escapeHtml(missing.join(', ')) + '</small>' : '')
-          + (badges.length ? '<small>' + badges.join(' · ') + '</small>' : '')
-          + '<small style="color:#78716c;">Sumber: ' + source + '</small>'
-          + (r.attribution_text ? '<small style="color:#78716c;">' + escapeHtml(r.attribution_text) + '</small>' : '')
-          + '</div>';
+        if (totalMin) badges.push(String(totalMin) + ' mnt');
+        const source = r.source_name || r.sourceName || r.source || sourceLabel;
+        const title = r.title || r.nama || 'Resep';
+        const img = safeUrl(r.image_url || r.imageUrl) ? `<img class="discovery-media" src="${escapeHtml(r.image_url || r.imageUrl)}" alt="" loading="lazy" />` : '';
+        let body = img + '<span class="discovery-body">'
+          + `<span class="discovery-title">${escapeHtml(title)}</span>`
+          + `<span class="discovery-score">Skor kecocokan: ${Math.round((r.matchScore || 0) * 100)}%</span>`
+          + `<span class="discovery-line"><strong>Bahan terpenuhi:</strong> ${escapeHtml((r.matchedIngredients || []).join(', '))}</span>`
+          + (missing.length ? `<span class="discovery-line"><strong>Kurang:</strong> ${escapeHtml(missing.join(', '))}</span>` : '');
+        if (badges.length) {
+          body += '<span class="discovery-meta">' + badges.map(b => `<span class="discovery-badge">${escapeHtml(b)}</span>`).join('') + '</span>';
+        }
+        body += sourceLine(source)
+          + (r.attribution_text ? `<span class="discovery-attrib">${escapeHtml(r.attribution_text)}</span>` : '')
+          + '</span>';
+        html += `<div class="discovery-card">${body}</div>`;
       }
       html += '</div>';
       container.innerHTML = html;
@@ -830,7 +1058,9 @@ Scan bahan yang kamu punya
       document.getElementById('tabScan').classList.toggle('active', !viral);
       document.getElementById('tabViral').classList.toggle('active', viral);
       if (viral) {
+        const hadCamera = !!cameraStream;
         stopCamera();
+        if (hadCamera) clearImageState();
         if (!viralLoaded) loadViral();
       }
     }
@@ -839,11 +1069,43 @@ Scan bahan yang kamu punya
       try {
         const response = await fetch('/api/viral');
         if (!response.ok) throw new Error('Katalog gagal dimuat');
-        gallery.innerHTML = recipeTiles((await response.json()).recipes) || 'Belum ada resep tersedia.';
+        const body = await response.json();
+        gallery.innerHTML = renderRecentTiles(body && body.recipes) || 'Belum ada resep terbaru. Coba lagi nanti.';
         viralLoaded = true;
       } catch (err) {
-        gallery.textContent = 'Resep belum bisa dimuat. Coba buka tab ini lagi.';
+        gallery.textContent = 'Resep terbaru belum bisa dimuat. Coba buka tab ini lagi.';
       }
+    }
+
+    // Renders the honest "recent" trend cards from /api/viral. Each card is a
+    // DATED, sourced article — NOT a popularity/viral claim. A missing or
+    // non-https thumbnail falls back to a text-only placeholder instead of a
+    // broken <img>, so the card still links out to the source article.
+    function renderRecentTiles(cards) {
+      return (cards || []).filter(c => c && c.nama && safeUrl(c.url)).map(c => {
+        const thumb = safeUrl(c.thumbnail) ? c.thumbnail : '';
+        const img = thumb
+          ? `<img src="${escapeHtml(thumb)}" alt="Foto ${escapeHtml(c.nama)}" loading="lazy" />`
+          : '<div class="recent-noimg" aria-hidden="true">📰</div>';
+        const dateLabel = (() => {
+          if (!c.published) return '';
+          const d = new Date(c.published);
+          if (Number.isNaN(d.getTime())) return '';
+          try {
+            return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+          } catch {
+            return '';
+          }
+        })();
+        const source = escapeHtml(c.source || 'detikFood');
+        return `
+          <a class="recipe-tile" href="${escapeHtml(c.url)}" target="_blank" rel="noopener noreferrer">
+            ${img}
+            <span>${escapeHtml(c.nama)} ↗</span>
+            <small>${dateLabel ? escapeHtml(dateLabel) + ' · ' : ''}${source}</small>
+          </a>
+        `;
+      }).join('');
     }
 
     // Reads the currently selected image files and returns their total size
