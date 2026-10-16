@@ -1,6 +1,7 @@
 # Local dev secrets and generated artifacts — never commit.
 .dev.vars
 .dev.vars.*
+!.dev.vars.example
 .wrangler/
 node_modules/
 tmp/

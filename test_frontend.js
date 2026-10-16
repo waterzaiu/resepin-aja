@@ -142,7 +142,16 @@ const recipe = {
 };
 result.renderResult(recipe, 'gemini', 'gemini-1.5-flash');
 const htmlOut = el.resultContainer.innerHTML;
-assert(htmlOut.includes('Terdapat di Astro $$?'), 'Astro button missing');
+assert(htmlOut.includes('Terdapat di toko online'), 'online shop button missing');
+const shopLink = htmlOut.match(/<a\b[^>]*id="onlineShopLink"[^>]*>/);
+assert(shopLink, 'online shop must be a direct link');
+const shopUrl = new URL(shopLink[0].match(/href="([^"]+)"/)[1]);
+assert.equal(shopUrl.origin, 'https://shopee.co.id');
+assert.equal(shopUrl.pathname, '/search');
+assert.equal(shopUrl.searchParams.get('keyword'), 'kecap manis, garam');
+assert(shopLink[0].includes('target="_blank"'), 'shop opens in a new tab');
+assert(shopLink[0].includes('rel="noopener noreferrer"'), 'shop link must isolate opener');
+assert(!htmlOut.includes('astroResult'), 'old Astro result must be removed');
 assert(htmlOut.includes('Belum ada resep tambahan'), 'empty-state missing for empty menuAlternatif');
 assert(htmlOut.includes('youtube.com/results'), 'YouTube link missing');
 assert(htmlOut.includes('Tutorial Video'), 'YouTube button label missing');

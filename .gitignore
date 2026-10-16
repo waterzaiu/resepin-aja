@@ -1,6 +1,30 @@
+# Credentials and local configuration
 .gemini-key
 .api
 .env
+.env.*
+!.env.example
 .api-keys.enc.json
 .api-keys.enc.json.tmp
+
+# Python environments and generated caches
 __pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# JavaScript dependencies and local build output
+node_modules/
+.wrangler/
+
+# Local exploratory browser probes (not the regression test suite)
+/probe*.mjs
+
+# Editor / OS artifacts
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

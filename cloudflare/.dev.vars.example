@@ -1,0 +1,6 @@
+# Salin ke .dev.vars untuk wrangler dev; jangan commit .dev.vars.
+# Isi hanya key provider yang dipakai. Nilai kosong tidak mengaktifkan provider.
+# Template ini aman dibagikan hanya selama seluruh nilai key tetap kosong.
+GEMINI_API_KEY=""
+OPENAI_API_KEY=""
+ANTHROPIC_API_KEY=""

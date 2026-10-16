@@ -277,6 +277,19 @@ const MEALDB_TERMS = {
 export function makeTheMealDBProvider(fetchFn) {
   return {
     name: 'TheMealDB',
+    // Gallery metadata is supplemental, never an ingredient-complete recipe.
+    async references(ingredients) {
+      const queries = [...new Set((Array.isArray(ingredients) ? ingredients : [])
+        .filter((item) => typeof item === 'string' && item.trim())
+        .map((item) => item.trim().slice(0, 80)))].slice(0, 3);
+      const batches = await Promise.all(queries.map((query) => mixedRecipes(query, fetchFn, 8)));
+      const seen = new Set();
+      return rankCards(batches.flat(), ingredients).filter((card) => {
+        if (seen.has(card.url)) return false;
+        seen.add(card.url);
+        return true;
+      }).slice(0, 12);
+    },
     async search(ingredients, preferences) {
       // Parity with TheMealDBRecipeProvider.search: normalize RAW ingredients
       // (which arrive as Indonesian user input, e.g. "telur"/"ayam") to their

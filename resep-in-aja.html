@@ -672,6 +672,7 @@ Apa isi kulkasmu?
           <div>
             <strong>Terjadi kesalahan</strong>
             <p id="errorMsg">Pesan error di sini.</p>
+            <a id="scanManualLink" href="#manualIngredients" class="btn btn-outline hidden">Tulis bahan manual</a>
             <button class="btn btn-outline" id="retryBtn" style="height: 32px; padding: 4px 12px; font-size: 12px;">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="23 4 23 10 17 10"/>
@@ -767,6 +768,7 @@ Apa isi kulkasmu?
   <script>
     let imageFile = null;
     let imageFiles = [];
+    let scanSelectionSubmitted = false;
     let imagePreviewUrl = null;
     let cameraStream = null;
     let cameraRequest = 0;
@@ -819,6 +821,12 @@ Apa isi kulkasmu?
     clearBtn.addEventListener('click', clearImage);
     submitBtn.addEventListener('click', handleSubmit);
     retryBtn.addEventListener('click', handleSubmit);
+    const scanManualLink = document.getElementById('scanManualLink');
+    scanManualLink.addEventListener('click', () => {
+      const input = document.getElementById('manualIngredients');
+      input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      input.focus({ preventScroll: true });
+    });
 
     // stopCamera() stops an *installed* camera stream. It does NOT touch
     // selected image state (that's clearImage's job). It always increments
@@ -990,7 +998,7 @@ Apa isi kulkasmu?
       if (!recipes.length) {
         const cards = aiResults.filter(c => c && c.title);
         if (cards.length) {
-          let aiHtml = warnBox('Pencocokan bahan tidak menemukan resep pasti; menampilkan saran terkait (mungkin kurang akurat).');
+          let aiHtml = warnBox(data.external_warning || 'Pencocokan bahan tidak menemukan resep pasti; menampilkan saran terkait (mungkin kurang akurat).');
           aiHtml += '<div class="discovery-grid">';
           for (const c of cards) {
             const safeHref = safeUrl(c.source_url) ? escapeHtml(c.source_url) : '';
@@ -1047,6 +1055,16 @@ Apa isi kulkasmu?
         html += `<div class="discovery-card">${body}</div>`;
       }
       html += '</div>';
+      const externalCards = (data && data.external_results) || [];
+      if (externalCards.length) {
+        const related = document.createElement('div');
+        renderDiscoveryResults(related, {
+          ai_results: externalCards, source: 'Sumber eksternal',
+          external_warning: data.external_warning || 'Saran terkait dari situs resep; kecocokan bahan, diet, dan waktu belum diverifikasi. Periksa resep aslinya.'
+        });
+        html += '<h3 style="margin-top:20px;">Resep terkait dari situs lain</h3>'
+          + related.innerHTML;
+      }
       container.innerHTML = html;
     }
 
@@ -1120,7 +1138,7 @@ Apa isi kulkasmu?
       // Enforce the UPLOAD_POLICY on the browser side (usability + early
       // rejection). The server re-enforces the same limits as a security
       // control; never rely on these client checks alone.
-      if (imageFiles.length + files.length > UPLOAD_POLICY.maxFiles) {
+      if ((scanSelectionSubmitted ? 0 : imageFiles.length) + files.length > UPLOAD_POLICY.maxFiles) {
         showError('Maksimal ' + UPLOAD_POLICY.maxFiles + ' foto per scan. Hapus foto untuk mulai ulang.');
         return;
       }
@@ -1134,9 +1152,15 @@ Apa isi kulkasmu?
           return;
         }
       }
-      if (totalSelectedBytes() + files.reduce((s, f) => s + f.size, 0) > UPLOAD_POLICY.maxTotalBytes) {
+      if ((scanSelectionSubmitted ? 0 : totalSelectedBytes()) + files.reduce((s, f) => s + f.size, 0) > UPLOAD_POLICY.maxTotalBytes) {
         showError('Total foto melebihi ' + (UPLOAD_POLICY.maxTotalBytes / (1024 * 1024)) + ' MB. Kurangi jumlah atau ukuran foto.');
         return;
+      }
+      // Before submit uploads add photos; after submit they start a new scan.
+      // Validate first so invalid uploads do not discard photos needed for retry.
+      if (scanSelectionSubmitted) {
+        cancelActiveScan();
+        clearImageState();
       }
       imageFiles.push(...files);
       const file = imageFiles[imageFiles.length - 1];
@@ -1170,6 +1194,7 @@ Apa isi kulkasmu?
       imagePreviewUrl = null;
       imageFile = null;
       imageFiles = [];
+      scanSelectionSubmitted = false;
       document.getElementById('photoCount').textContent = '';
       previewImg.src = '';
       previewImg.classList.add('hidden');
@@ -1194,6 +1219,9 @@ Apa isi kulkasmu?
     // Called on reset/retry so a stale response can never clobber new state.
     function cancelActiveScan() {
       scanRequestId++;
+      isSubmitting = false;
+      cameraBtn.disabled = false;
+      uploadBtn.disabled = false;
       if (scanAbortController) {
         scanAbortController.abort();
         scanAbortController = null;
@@ -1272,6 +1300,7 @@ Apa isi kulkasmu?
         // processed only by the preferred provider unless the user explicitly
         // opts in to fallback (which may route images to additional providers).
         formData.append('allowFallback', 'false');
+        scanSelectionSubmitted = true;
 
         // AbortController so a reset/retry cancels the in-flight request.
         scanAbortController = new AbortController();
@@ -1287,8 +1316,9 @@ Apa isi kulkasmu?
         if (requestId !== scanRequestId) return;
 
         if (!resp.ok) {
-          const msg = data?.error || 'Gagal memproses gambar. Coba lagi.';
-          showError(msg);
+          const detail = resp.status >= 400 && resp.status < 500 && resp.status !== 429 && typeof data?.error === 'string'
+            ? data.error : 'Layanan scan belum bisa memproses foto saat ini.';
+          showScanError(detail);
           loadingBox.classList.add('hidden');
           submitBtn.classList.remove('hidden');
           clearBtn.classList.remove('hidden');
@@ -1304,25 +1334,30 @@ Apa isi kulkasmu?
         uploadBtn.disabled = false;
       } catch (err) {
         // An aborted request is intentional (reset/retry) — swallow it.
+        if (requestId !== scanRequestId) return;
         if (err && err.name === 'AbortError') return;
         console.error(err);
-        let msg = err.message || 'Gagal memproses gambar.';
-        if (err.message && err.message.includes('Failed to fetch')) {
-          msg = 'Tidak bisa terhubung ke server. Pastikan server.py sedang berjalan (jalankan: python3 server.py).';
-        }
-        showError(msg);
+        showScanError('Scan belum berhasil. Koneksi atau layanan scan mungkin sedang bermasalah.');
         loadingBox.classList.add('hidden');
         submitBtn.classList.remove('hidden');
         clearBtn.classList.remove('hidden');
         cameraBtn.disabled = false;
         uploadBtn.disabled = false;
       } finally {
-        isSubmitting = false;
-        scanAbortController = null;
+        if (requestId === scanRequestId) {
+          isSubmitting = false;
+          scanAbortController = null;
+        }
       }
     }
 
+    function showScanError(detail) {
+      showError(detail + ' Bahan belum berhasil dikenali. Coba lagi dengan foto yang sama atau tulis bahan manual di bawah.');
+      scanManualLink.classList.remove('hidden');
+    }
+
     function showError(msg) {
+      scanManualLink.classList.add('hidden');
       errorMsg.textContent = msg;
       errorBox.classList.remove('hidden');
       errorBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -1448,15 +1483,15 @@ Apa isi kulkasmu?
                     </li>
                   `).join('')}
                 </ul>
-                <button class="btn btn-outline btn-full" id="astroCheckBtn" type="button" style="margin-top: 12px;">
+                <a class="btn btn-outline btn-full" id="onlineShopLink" href="https://shopee.co.id/search?keyword=${encodeURIComponent(r.bahanKurang.map(b => String(b).trim()).filter(Boolean).join(', '))}" target="_blank" rel="noopener noreferrer" style="margin-top: 12px;">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="9" cy="21" r="1"/>
                     <circle cx="20" cy="21" r="1"/>
                     <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
                   </svg>
-                  Terdapat di Astro $$?
-                </button>
-                <p class="missing-help" id="astroResult" style="margin-top: 8px; display: none;"></p>
+                  Terdapat di toko online
+                </a>
+                <p class="missing-help" style="margin-top: 8px;">Cari bahan di Shopee. Stok dan harga mengikuti penjual.</p>
               </div>
             </div>
           ` : ''}
@@ -1522,23 +1557,7 @@ Apa isi kulkasmu?
         });
       }
 
-      const astroBtn = document.getElementById('astroCheckBtn');
-      if (astroBtn) {
-        astroBtn.addEventListener('click', () => {
-          // Jujur: tidak ada API stok/harga Astro yang terhubung. Arahkan user
-          // untuk cek sendiri di aplikasi/situs Astro, tanpa mengarang ketersediaan
-          // atau harga.
-          const result = document.getElementById('astroResult');
-          if (!result) return;
-          const names = (r.bahanKurang || []).map(b => String(b).trim()).filter(Boolean);
-          const list = names.slice(0, 6).join(', ') || 'bahan yang kurang';
-          result.textContent =
-            'Kami tidak terhubung ke data stok/harga Astro, jadi tidak bisa memastikan ' +
-            'ketersediaan atau harga. Silakan cek "' + list + '" langsung di aplikasi atau ' +
-            'situs Astro terdekat.';
-          result.style.display = 'block';
-        });
-      }
+
       resultContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 

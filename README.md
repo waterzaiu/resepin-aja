@@ -1,367 +1,332 @@
-# Resep in aja — Zero-Waste Fridge AI 🍳 (Multi-Provider Local Version)
+# 🍳 Resep in aja
 
-> **Purwarupa Hackathon Sustainability** — Ubah sisa bahan makanan jadi resep masakan Indonesia.
-> Versi standalone multi-provider — pakai OpenAI / Claude / Gemini / Groq / OpenRouter / GLM / **DeepSeek-VL2 (via SiliconFlow)**. Bebas pilih!
+### Isi kulkas seadanya. Ide masaknya banyak.
 
-## 🌈 Provider yang Didukung
+Purwarupa **Hackathon Sustainability** untuk menemukan ide masak dari bahan yang sudah ada: ambil foto, unggah gambar, atau tulis bahan sendiri. Aplikasi menggabungkan AI vision, pencocokan bahan deterministik, dan tautan resep dari sumber eksternal.
 
-| Provider | Model Default | Harga | Cara Dapat API Key |
-|----------|---------------|-------|---------------------|
-| **Google Gemini** ⭐ | `gemini-1.5-flash` | **GRATIS** (quota harian) | https://aistudio.google.com/apikey |
-| **Groq** ⭐ | `llama-3.2-90b-vision-preview` | **GRATIS** (sangat cepat) | https://console.groq.com/keys |
-| **BigModel (GLM)** ⭐ | `glm-4v-flash` | **GRATIS** (quota besar) | https://open.bigmodel.cn |
-| **SiliconFlow** ⭐ | `deepseek-ai/deepseek-vl2` | **GRATIS** (~14M tokens) | https://siliconflow.cn |
-| **OpenRouter** | `google/gemini-2.0-flash-exp:free` | GRATIS (banyak model) | https://openrouter.ai/keys |
-| **Anthropic Claude** | `claude-3-5-sonnet-20241022` | $5 free credit | https://console.anthropic.com |
-| **OpenAI** | `gpt-4o-mini` | Berbayar (~$0.15/1K img) | https://platform.openai.com/api-keys |
+**[Mulai lokal](#-jalankan-lokal) · [Cara pakai](#-alur-penggunaan) · [Arsitektur](#-arsitektur) · [API](#-ringkasan-api-python) · [Deployment](#-deployment)**
 
-**Rekomendasi:** Pakai **Gemini**, **Groq**, atau **SiliconFlow (DeepSeek-VL2)** — gratis dan kualitas vision-nya bagus.
+> **Tanpa key AI?** Jalankan server dan coba masukan bahan manual. Katalog seed tersedia tanpa kredensial. Scan foto memerlukan key provider vision. Ini bukan aplikasi produksi siap pakai dan bukan alat penentu keamanan pangan.
 
-> 💡 **Note tentang DeepSeek:** API resmi DeepSeek (`api.deepseek.com`) belum support image input (cuma `deepseek-chat` & `deepseek-reasoner` text-only). Untuk pakai DeepSeek vision (DeepSeek-VL2), gunakan provider **SiliconFlow** di atas — mereka host DeepSeek-VL2 dengan API OpenAI-compatible + free tier.
+## ✨ Fitur
 
-## 🔐 Kelola API Key lewat CLI (Windows)
+| Fitur | Yang tersedia |
+| --- | --- |
+| Foto bahan | Kamera browser atau unggah beberapa gambar, pratinjau, hapus/reset, dan coba ulang |
+| Resep AI | Nama hidangan, waktu/porsi, bahan terdeteksi, bahan kurang, langkah memasak, serta label provider/model |
+| Masukan manual | Bahan dipisahkan koma; filter masakan, vegetarian/vegan, dan waktu maksimum |
+| Pencocokan deterministik | Normalisasi alias bahan multilingual, skor kecocokan, bahan terpenuhi dan bahan kurang |
+| Jelajah resep | Galeri inspirasi, pencarian resep/bahan, dan tautan ke sumber asli |
+| Tautan pendamping | Pencarian tutorial YouTube dan tombol toko online; bukan pemesanan atau checkout di aplikasi |
+| Pilihan runtime | Server Python lokal atau implementasi Cloudflare Workers dengan frontend yang sama |
+| Pengelolaan key Windows | CLI terenkripsi DPAPI dan dashboard terminal interaktif |
 
-Jalankan perintah ini di terminal **mesin yang menjalankan `server.py`**. Input key tersembunyi (jangan taruh key sebagai argumen perintah):
+## 🧭 Alur penggunaan
 
-```bash
-python3 key_store.py set gemini       # Google Gemini
-python3 key_store.py set openai       # ChatGPT / OpenAI API
-python3 key_store.py set xai          # xAI Grok
-python3 key_store.py set groq         # Groq (bukan Grok)
-python3 key_store.py set openrouter   # Model dari OpenRouter
-python3 key_store.py set anthropic    # Claude
-python3 key_store.py set bigmodel     # GLM / Z.AI
-python3 key_store.py set siliconflow
-python3 key_store.py list             # sumber key, tanpa menampilkan isinya
-python3 key_store.py remove gemini    # hapus key tersimpan lokal
+### 1. Buka aplikasi melalui server
+
+Kunjungi **http://localhost:8787**, bukan membuka berkas HTML melalui `file://`. Frontend menggunakan endpoint API same-origin.
+
+### 2. Pilih cara memasukkan bahan
+
+**Jalur foto — tab “Bahan & resep”**
+
+1. Klik **Buka Kamera**, izinkan akses kamera, lalu arahkan ke bahan di tempat terang; atau klik **Unggah foto**.
+2. Periksa pratinjau dan jumlah gambar. Kamera dapat membuat foto utuh beserta empat crop otomatis untuk membantu membaca bahan kecil; crop ikut dihitung dalam batas gambar.
+3. Klik **Cari Resep Sekarang**. Browser mengirim foto ke backend, bukan langsung ke API provider.
+4. Baca resep, bahan yang terdeteksi, bahan dapur yang mungkin kurang, dan langkah memasak. Periksa kembali hasil AI sebelum digunakan.
+5. Jelajahi resep alternatif atau tutorial YouTube. **Resep Baru** mengembalikan alur untuk input berikutnya; **Coba lagi** tersedia ketika scan gagal.
+
+**Jalur manual — tanpa scan AI**
+
+1. Pada **Atau tulis bahanmu**, isi misalnya `telur, nasi, bawang putih`.
+2. Pilih filter **Masakan**, **Diet**, atau **Waktu maks** bila diperlukan, lalu klik **Cari Resep**.
+3. Bandingkan skor kecocokan, bahan terpenuhi, bahan kurang, dan sumber resep. Skor adalah kecocokan bahan, bukan nilai gizi atau jaminan keamanan.
+4. Jika hasil kosong, tambah bahan yang memang tersedia atau longgarkan filter. Saran fallback diberi peringatan karena tidak setara dengan kecocokan katalog.
+
+**Sekadar mencari ide?** Gunakan galeri **Mau masak apa hari ini?** dan kolom pencarian. Kartu bertautan membuka sumber di tab baru. Tab **Resep Terbaru** perlu dibaca dengan catatan perbedaan runtime di bawah: label UI tidak berarti backend Python menyediakan feed terkini.
+
+## 🏗️ Arsitektur
+
+```mermaid
+flowchart TD
+    U[Pengguna: kamera / unggah / bahan manual] --> UI[resep-in-aja.html]
+    UI -->|HTTP same-origin| B{Backend yang dijalankan}
+    B --> P[Python: server.py]
+    B --> W[Cloudflare Workers]
+    P -->|scan foto| S[Pillow: validasi, hapus metadata, encode JPEG]
+    S --> V[Provider AI vision terkonfigurasi]
+    V --> J[Parse dan validasi resep JSON]
+    J --> UI
+    P -->|bahan manual| D[Discovery dan normalisasi bahan]
+    D --> C[Supabase opsional + TheMealDB]
+    D --> L[Katalog seed lokal bila Supabase tidak dikonfigurasi]
+    C --> M[Skor bahan dan filter preferensi]
+    L --> M
+    M --> UI
+    P --> G[Galeri / sumber resep eksternal]
+    G --> UI
+    W --> WV[Adapter vision, discovery, galeri dan feed Workers]
+    WV --> UI
 ```
 
-Untuk provider/model lain yang kompatibel, gunakan key OpenRouter dan atur `OPENROUTER_MODEL` ke model vision yang tersedia. Server harus di-restart setelah perubahan key. Jika key juga ada di environment variable, **environment menang**; `remove` hanya menghapus key tersimpan lokal, bukan env var.
+### Dua jalur yang berbeda
 
-Key lokal disimpan dengan **Windows DPAPI** per akun Windows; SHA-256 hanya checksum, bukan enkripsi. Di Linux/macOS, aplikasi dapat membaca key dari environment/secret hosting, tetapi CLI `set` terenkripsi ini hanya berjalan di Windows. Jangan upload `.api-keys.enc.json` ke hosting lain. Pengguna web yang membuka server bersama tidak memiliki key atau pilihan provider masing-masing: **ini konfigurasi per instalasi/server**, bukan BYOK per pengunjung. Untuk pengguna lain memakai key mereka sendiri via CLI, mereka perlu menjalankan server sendiri pada akun/mesin mereka; deployment publik multi-user membutuhkan akun/login dan isolasi key terpisah.
+- **Scan foto Python** memvalidasi gambar menggunakan Pillow, memanggil provider vision, memvalidasi struktur resep, lalu memperkaya alternatif dari sumber resep. Ini bukan sekadar foto → pencocokan deterministik.
+- **Masukan manual Python** menggabungkan hasil Supabase dan TheMealDB untuk dicocokkan. Jika Supabase tidak dikonfigurasi, hasil seed lokal ikut digabung. Hasil diurutkan berdasarkan skor dan status verifikasi, maksimal 10 resep.
+- Ketika tidak ada kecocokan manual, respons Python memakai label `ai_fallback`, tetapi fungsi saat ini mengambil kartu terkait melalui `lookup_recipe_cards` (TheMealDB), **bukan memanggil model AI**. Jangan menafsirkan nama field itu sebagai bukti generasi AI.
+- Adapter discovery terpisah dari scraping legacy. Galeri dan alternatif Python masih dapat memakai adapter sumber eksternal melalui `recipe_sources.py`.
 
-## 🖥️ Menu terminal server
+## 🚀 Jalankan lokal
 
-Saat `python3 server.py` dijalankan di terminal interaktif **Windows**, tampilan awal adalah dashboard status server dan provider aktif (bukan banjir log). Tekan `1` untuk **Setup key**: pilih provider dengan nomor, lalu tambah/ganti key, hapus key lokal dengan konfirmasi, atau lihat status tanpa melihat nilainya. Tekan `Ctrl+L` untuk berpindah **dashboard ↔ log terbaru**, dan `Q` untuk menghentikan server. Perubahan key lewat menu langsung aktif untuk permintaan berikutnya; environment variable tetap diprioritaskan dan tidak terhapus lewat menu. Di terminal non-interaktif/server Linux, server berjalan biasa dan log dicetak ke stderr.
+### Prasyarat
 
-## 🚀 Cara Pakai
+- Python **3.12 disarankan** untuk alur pengembangan ini.
+- `pip` milik interpreter yang sama; gunakan `python -m pip`, bukan `pip` tanpa interpreter.
+- Browser modern; kamera membutuhkan izin dan secure context, misalnya `localhost` atau HTTPS.
+- Koneksi internet untuk provider AI/sumber eksternal. Pillow adalah satu-satunya dependensi runtime Python non-stdlib dalam `requirements.txt`.
 
-### Langkah 1 — Install dependensi
+Jalankan semua perintah dari root repositori. Tidak ada langkah build frontend untuk server Python.
 
-Satu-satunya dependensi non-stdlib adalah **Pillow** (validasi/sanitasi gambar server-side). Install sebelum menjalankan:
+### Windows — PowerShell
 
-```bash
-python3 -m pip install -r requirements.txt
-```
-
-> Tanpa Pillow, server tetap jalan tapi **menolak semua scan foto** (HTTP 503) karena tidak bisa memvalidasi gambar dengan aman. Endpoint discovery/resep non-foto tetap berfungsi.
-
-### Langkah 2 — Dapatkan API Key (Gratis)
-
-Pilih salah satu provider di atas, daftar, dan buat API key. Formatnya beda-beda:
-- **Gemini**: `AIzaSyA...` (panjang ~40 karakter)
-- **Groq**: `gsk_abc...` (panjang ~100 karakter)
-- **BigModel**: `id.secret` (ada titik di tengah)
-- **OpenRouter**: `sk-or-v1-abc...`
-
-### Langkah 3 — Konfigurasi
-
-**Opsi A — Pakai file `.env` (rekomendasi):**
-```bash
-cp .env.example .env
-# Edit .env, isi minimal salah satu API key
-```
-
-**Opsi B — Set env var langsung:**
-```bash
-# Mac/Linux
-export GEMINI_API_KEY="AIza..."
-./start.sh
-
-# Windows (PowerShell)
-$env:GEMINI_API_KEY="AIza..."
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+Copy-Item .env.example .env
+# Edit .env secara lokal; jangan unggah key ke repositori.
 .\start.bat
 ```
 
-### Langkah 4 — Jalankan
+Jika kebijakan PowerShell memblokir aktivasi, gunakan **Command Prompt** tanpa mengubah kebijakan sistem:
 
-**Mac/Linux:**
+```bat
+py -3.12 -m venv .venv
+.venv\Scripts\activate.bat
+python -m pip install -r requirements.txt
+copy .env.example .env
+start.bat
+```
+
+Jangan jalankan perintah `copy` bila `.env` sudah ada. Alternatif pengelolaan key terenkripsi Windows:
+
+```powershell
+python key_store.py set gemini
+python key_store.py list
+python server.py
+```
+
+`set` meminta key lewat input tersembunyi. Di terminal Windows interaktif, dashboard menyediakan `1` untuk setup key, `Ctrl+L` untuk dashboard/log, dan `Q` untuk berhenti. Perubahan lewat menu berlaku untuk permintaan berikutnya.
+
+### macOS / Linux — Bash
+
 ```bash
-./start.sh
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+cp -n .env.example .env
+# Edit .env secara lokal.
+bash start.sh
 ```
 
-**Windows:**
-```bash
-start.bat   # atau klik dua kali
+Pada distro Linux yang memisahkan modul venv, pasang paket venv untuk versi Python Anda jika pembuatan virtualenv gagal.
+
+### Konfigurasi minimum
+
+Untuk mencoba **manual matching saja**, tidak perlu mengisi key. Untuk scan, isi satu provider dan model vision yang tersedia pada akun Anda, misalnya:
+
+```dotenv
+PROVIDER=gemini
+GEMINI_API_KEY=isi_key_anda_di_mesin_lokal
+GEMINI_MODEL=gemini-3.1-flash-lite
+PORT=8787
 ```
 
-Server otomatis membuka browser ke **http://localhost:8787**. Tinggal foto bahan makanan → dapat resep!
+> `.env.example` memuat sejumlah contoh model lama, termasuk `GEMINI_MODEL=gemini-1.5-flash`. Karena nilai environment mengalahkan default kode, perbarui atau hapus baris model lama setelah menyalin template. Nama default di tabel berikut adalah isi kode, **bukan jaminan ketersediaan model di provider**.
 
-## 🔄 Multi-Provider & Auto-Fallback
+`start.sh` dan `start.bat` memuat `.env`; **`python server.py` sendiri tidak memuat `.env`**. Bila menjalankan Python langsung, set environment terlebih dahulu atau gunakan key store Windows. Untuk `.env` lintas platform, pakai format sederhana `NAMA=nilai`, tanpa `export` dan komentar sebaris; loader Windows bukan parser dotenv lengkap. Jangan menjalankan `start.sh` dengan `.env` dari sumber tidak tepercaya karena berkas itu di-`source` oleh Bash.
 
-Isi **lebih dari satu API key** untuk dapat auto-fallback. Contoh `.env`:
+Server mencoba membuka browser otomatis; jika tidak berhasil, buka URL sendiri. Hentikan dengan `Ctrl+C` atau menu terminal Windows. Default bind adalah `127.0.0.1:8787`.
 
-```env
-GEMINI_API_KEY=AIza...
-GROQ_API_KEY=gsk_...
-BIGMODEL_API_KEY=xxx.xxx
-```
+## ⚙️ Konfigurasi provider & privasi
 
-Saat scan, server akan coba provider satu per satu (default urutan: OpenAI → Anthropic → Gemini → xAI → Groq → OpenRouter → BigModel → SiliconFlow). Kalau satu gagal (rate limit, key invalid, down), otomatis pindah ke berikutnya.
+### Default server Python
 
-> ⚠️ **Privacy default:** fallback antar provider **nonaktif secara default**. Foto hanya dikirim ke provider utama/pilihan, kecuali pengguna meng-opt-in. Frontend mengirim field `allowFallback` per request; operator juga bisa mengaktifkan global lewat `ALLOW_CROSS_PROVIDER_FALLBACK=true`. Mengaktifkan fallback berarti foto bisa dikirim ke lebih dari satu provider — pertimbangkan privasi pengguna.
+| `PROVIDER` | Environment key | Model default kode | Model override |
+| --- | --- | --- | --- |
+| `openai` | `OPENAI_API_KEY` | `gpt-4o-mini` | `OPENAI_MODEL` |
+| `anthropic` | `ANTHROPIC_API_KEY` | `claude-3-5-sonnet-20241022` | `ANTHROPIC_MODEL` |
+| `gemini` | `GEMINI_API_KEY` | `gemini-3.1-flash-lite` | `GEMINI_MODEL` |
+| `xai` | `XAI_API_KEY` | `grok-4-1-fast-non-reasoning` | `XAI_MODEL` |
+| `groq` | `GROQ_API_KEY` | `meta-llama/llama-4-scout-17b-16e-instruct` | `GROQ_MODEL` |
+| `openrouter` | `OPENROUTER_API_KEY` | `google/gemini-2.0-flash-exp:free` | `OPENROUTER_MODEL` |
+| `bigmodel` | `BIGMODEL_API_KEY` atau `ZAI_API_KEY` | `glm-4v-flash` | `BIGMODEL_MODEL` |
+| `siliconflow` | `SILICONFLOW_API_KEY` | `deepseek-ai/deepseek-vl2` | `SILICONFLOW_MODEL` |
 
-**Pilih provider utama manual:**
-```env
-PROVIDER=gemini   # pakai Gemini duluan, fallback ke lainnya kalau gagal
-```
+Dengan `PROVIDER=auto`, urutan pemilihan adalah OpenAI → Anthropic → Gemini → xAI → Groq → OpenRouter → BigModel → SiliconFlow, hanya untuk provider yang memiliki key. `PROVIDER` dapat memprioritaskan salah satunya. Dukungan adapter tidak menjamin model/key dapat digunakan; cek kemampuan image input, akses akun, kuota, dan ketentuan provider. README ini tidak menjanjikan harga atau kuota gratis.
 
-Endpoint `/health` untuk cek status:
+### Batas data dan fallback
+
+- Key berada di backend, bukan form pengunjung. Konfigurasi adalah **per instalasi/server**, bukan BYOK per pengguna web.
+- Environment key diprioritaskan atas key store lokal. `python key_store.py remove gemini` hanya menghapus key tersimpan, tidak menghapus environment. Restart setelah perubahan environment atau CLI.
+- Key store menggunakan **Windows DPAPI per akun**. Linux/macOS/hosting memakai environment secrets; jangan memindahkan `.api-keys.enc.json` sebagai mekanisme konfigurasi portabel.
+- Fallback lintas provider **nonaktif secara default**. Frontend saat ini selalu mengirim `allowFallback=false`, yang mengalahkan konfigurasi global. Tidak ada sakelar persetujuan fallback di UI saat ini.
+- Klien API dapat mengirim `allowFallback=true` untuk mengizinkan percobaan provider berikutnya pada kegagalan yang dapat dicoba ulang. Jika field tidak dikirim, server menggunakan `ALLOW_CROSS_PROVIDER_FALLBACK` (default `false`). Foto dapat mencapai lebih dari satu provider dalam mode ini.
+- Backend Python memproses foto dalam memori dan tidak menuliskannya sebagai arsip upload. Pillow menghapus metadata dan meng-encode ulang ke JPEG. Ini **bukan jaminan retensi nol oleh provider AI**; periksa kebijakan provider sebelum mengirim foto sensitif.
+- Galeri dapat memuat gambar HTTPS eksternal dan tautan sumber. Browser pengguna dapat menghubungi situs tersebut; “server lokal” tidak berarti seluruh alur tanpa jaringan.
+
+### Discovery & konfigurasi operasional
+
+| Variabel | Default / fungsi |
+| --- | --- |
+| `HOST`, `PORT` | `127.0.0.1`, `8787` |
+| `ENABLE_EXTERNAL_RECIPES` | `true`; mengatur sumber eksternal pada adapter discovery, bukan sakelar offline global untuk semua galeri/alternatif |
+| `RECIPE_MATCH_MIN_SCORE` | `0.45` |
+| `EXTERNAL_RECIPE_TIMEOUT_SECONDS` | `8` |
+| `SUPABASE_URL`, `SUPABASE_ANON_KEY` | Katalog Supabase opsional; `SUPABASE_PUBLISHABLE_KEY` tersedia sebagai alias key |
+| `THEMEALDB_API_KEY` | Key TheMealDB opsional; adapter memakai `1` bila tidak diisi |
+| `SCAN_RATE_LIMIT_REQUESTS`, `SCAN_RATE_LIMIT_WINDOW_SECONDS` | `5` scan per IP per `60` detik |
+| `MAX_CONCURRENT_SCANS`, `SCAN_DEADLINE_SECONDS` | `2` scan bersamaan; deadline chain scan `120` detik |
+| `MAX_REQUEST_THREADS` | `16` slot permintaan pada server Python |
+| `PUBLIC_DEPLOYMENT`, `ALLOWED_HOSTS`, `ALLOWED_ORIGINS` | Pengamanan deployment dan pembatasan host/origin; tinjau implementasi sebelum mengekspos server |
+
+**Supabase opsional:** buat proyek, jalankan [`supabase_schema.sql`](supabase_schema.sql) melalui SQL Editor, lalu set URL dan **anon/publishable key**, bukan `service_role`. Skema menyediakan RLS untuk pembacaan resep publik. Restart server setelah konfigurasi. Tanpa Supabase, jalur seed tetap tersedia.
+
+## 🔌 Ringkasan API Python
+
+Semua rute relatif terhadap origin aplikasi. Ini ringkasan implementasi `server.py`, bukan janji bahwa perilaku Workers identik.
+
+| Metode | Endpoint | Kegunaan |
+| --- | --- | --- |
+| `GET` | `/`, `/index.html` | Frontend |
+| `GET` | `/health`, `/ready` | Status provider, model, Pillow, Supabase, dan konfigurasi fallback |
+| `POST` | `/api/scan-resep` | Multipart; field `image` dapat diulang, `allowFallback` opsional; hasil `recipe`, `provider`, `model` |
+| `POST` | `/api/recipes/match` | JSON `ingredients` dan `preferences`; hasil `recipes`, `ai_results`, `fallback`, serta metadata sumber |
+| `POST` | `/api/ingredients/normalize` | Normalisasi daftar `ingredients` |
+| `GET` | `/api/recipes/search?q=...` | Pencarian katalog seed |
+| `GET` | `/api/recipes/<id>` | Detail resep seed atau Supabase |
+| `GET` | `/api/resep?q=...` | Pencarian galeri yang dipakai UI |
+| `GET` | `/api/inspirasi` | Galeri inspirasi |
+| `GET` | `/api/viral` | Daftar kartu statis pada Python; bukan feed popularitas real-time |
+
+Contoh Bash/macOS/Linux (PowerShell dapat memakai `Invoke-RestMethod` dengan objek JSON setara):
+
 ```bash
 curl http://localhost:8787/health
-# → {"ok": true, "active_providers": ["gemini", "groq"], "preferred": "auto", ...}
-```
 
-## 📁 Isi Package
-
-```
-resep-in-aja-local/
-├── resep-in-aja.html    # UI aplikasi (mobile-first, tema amber/orange)
-├── server.py            # Multi-provider proxy server (Python 3.8+, stdlib + Pillow)
-├── recipe_discovery.py  # Discovery deterministic + provider adapters
-├── ingredients.py       # Normalisasi bahan multilingual + alias
-├── seed_data.py         # Katalog resep asli internasional (offline)
-├── supabase_client.py   # Adapter Supabase REST (anon key + RLS)
-├── supabase_schema.sql  # Migrasi tabel + RLS + seed (jalankan manual)
-├── recipe_sources.py    # Adapter scraping legacy (terisolasi dari discovery)
-├── start.sh             # Quick start Mac/Linux (auto-load .env)
-├── start.bat            # Quick start Windows
-├── .env.example         # Template config semua provider
-└── README.md            # File ini
-```
-
-## 🛠️ Cara Kerja Multi-Provider
-
-1. Browser POST foto ke `/api/scan-resep` di localhost
-2. `server.py` pilih provider berdasarkan `PROVIDER` env var (default: auto)
-3. Provider pertama yang punya key dicoba duluan:
-   - **OpenAI/Claude/Groq/OpenRouter**: format OpenAI-compatible (image_url base64)
-   - **Anthropic**: format Claude (image source base64 + system terpisah)
-   - **Gemini**: format Google (inlineData + systemInstruction)
-   - **BigModel**: format GLM (mirip OpenAI)
-4. Kalau gagal (HTTP 4xx/5xx/network error), coba provider berikutnya
-5. Response AI diparse JSON → tampilkan resep + badge provider yang dipakai
-
-## 🔒 Kontrak Upload / API (untuk frontend)
-
-Nilai-nilai ini adalah **sumber kebenaran tunggal** untuk frontend — hard-coded
-di `server.py` dan hanya bisa diubah lewat env var yang tercantum. Frontend
-harus mematuhi batas ini sebelum mengirim, dan membaca pesan error yang
-dikembalikan server (field `error`, `retryAfterSeconds`).
-
-| Konfigurasi | Nilai default | Env var |
-|---|---|---|
-| Max file per scan | `MAX_FILES = 5` | — |
-| Max byte per file | `MAX_BYTES_PER_FILE = 4 MB` | — |
-| Max total byte | `MAX_TOTAL_BYTES = 12 MB` | — |
-| Max dimensi gambar | `MAX_IMAGE_WIDTH/HEIGHT = 4096` | — |
-| Max piksel terdekode | `MAX_DECODED_PIXELS = 16,000,000 px` | — |
-| Rate limit per IP | 5 req / 60 detik | `SCAN_RATE_LIMIT_REQUESTS`, `SCAN_RATE_LIMIT_WINDOW_SECONDS` |
-| Concurrency scan | `MAX_CONCURRENT_SCANS = 2` | `MAX_CONCURRENT_SCANS` |
-| Deadline total scan | `SCAN_DEADLINE_SECONDS = 120` | `SCAN_DEADLINE_SECONDS` |
-| Fallback antar provider | **nonaktif (default)** | opt-in per-request (`allowFallback` form field) atau `ALLOW_CROSS_PROVIDER_FALLBACK=true` |
-
-- **Endpoint**: `POST /api/scan-resep` (multipart/form-data, field `image`).
-  Setiap gambar divalidasi + di-sanitize server-side dengan Pillow (signature,
-  dimensi, decompression-bomb) lalu di-re-encode ke JPEG sebelum dikirim ke
-  provider AI — jangan anggap cek MIME di browser sebagai keamanan.
-- **Kode error**: `400` (gambar/input tidak valid), `413` (terlalu besar),
-  `429` (rate limit, ada `retryAfterSeconds`), `502` (semua provider gagal),
-  `503` (belum ada API key / server sibuk), `504` (provider timeout).
-- **Readiness**: `GET /health` mengembalikan `ready:false` + HTTP `503` saat
-  tidak ada provider yang punya key. `GET /ready` = alias.
-- **Keamanan**: server bind ke `127.0.0.1` secara default (env `HOST=0.0.0.0`
-  hanya untuk deploy di belakang proxy). Tidak ada CORS wildcard; header
-  `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`, dan
-  CSP nonce-free (default-src 'self') dipasang di semua respons. Origin/Host
-  bisa dibatasi lewat `ALLOWED_ORIGINS` / `ALLOWED_HOSTS` (CSV).
-
-## ❓ Troubleshooting
-
-**"Tidak ada API key yang dikonfigurasi"**
-→ Isi minimal salah satu API key di `.env` (lihat langkah 2)
-
-**"Semua provider gagal"**
-→ Cek `/health` untuk lihat provider aktif
-→ Cek log server (terminal) untuk detail error per provider
-→ Pastikan API key valid dan belum expired
-
-**"Rate limit tercapai" (HTTP 429)**
-→ Tunggu sebentar (quota harian reset otomatis)
-→ Atau isi API key provider lain sebagai fallback
-
-**"Photo tidak terdeteksi bahan"**
-→ Foto ulang dengan pencahayaan lebih baik
-→ Beberapa model (Claude) lebih sensitif ke format gambar — coba provider lain
-
-**"Port 8787 sudah dipakai"**
-→ `PORT=9000 python3 server.py`
-
-## 🎨 Kustomisasi
-
-**Ganti model** per provider via env var:
-```bash
-export GEMINI_MODEL=gemini-2.0-flash-exp     # model Gemini terbaru
-export OPENAI_MODEL=gpt-4o                    # model OpenAI lebih powerful
-export GROQ_MODEL=llama-3.2-11b-vision-preview  # model Groq lebih ringan
-```
-
-**Ganti warna tema**:
-Edit variabel CSS di awal `<style>` di `resep-in-aja.html`.
-
-**Ganti port**:
-```bash
-PORT=9000 python3 server.py
-```
-
-## 💡 Tips Memilih Provider
-
-| Kebutuhan | Rekomendasi |
-|-----------|-------------|
-| **Demo hackathon, harus stabil** | Gemini + Groq (dua-duanya free, jadi fallback) |
-| **Budget $0** | Gemini atau Groq saja sudah cukup |
-| **Kualitas terbaik** | OpenAI GPT-4o atau Claude 3.5 Sonnet |
-| **Speed tercepat** | Groq (inference di hardware LPU) |
-| **Model open-source** | Groq Llama 3.2 atau OpenRouter ( banyak pilihan ) |
-| **Akses banyak model dengan 1 key** | OpenRouter (aggregator) |
-
-## 🏆 Hackathon Pitch Points
-
-1. **Masalah:** Indonesia membuang 23-48 juta ton makanan/tahun (Bappenas)
-2. **Solusi:** AI bantu manfaatkan sisa bahan kulkas jadi resep, bukan dibuang
-3. **Tech:** Python + HTML + **Multi-provider AI Vision** (Gemini/Claude/GPT/Llama/GLM) — fleksibel, anti vendor lock-in
-4. **Resilience:** Auto-fallback antar provider → 99% uptime walau satu API down
-5. **Skalabilitas:** Bisa integrasi dengan e-commerce grocery (rekomendasi bahan kurang)
-6. **Impact:** Kurangi food waste, hemat belanja, edukasi masak sehat
-
-## 🔎 Recipe Discovery (Deterministic Matching)
-
-Selain scan foto berbasis AI, aplikasi punya **discovery deterministic** yang
-mencocokkan bahan (hasil scan ATAU masukan manual) ke katalog resep tanpa
-memakai API berbayar.
-
-**Urutan provider (sebelum AI fallback):**
-
-1. **Supabase** — katalog resep komunitas (jika `SUPABASE_URL` + anon key diisi).
-   RLS di `supabase_schema.sql` membatasi anon key ke resep publik saja.
-2. **TheMealDB** — endpoint publik gratis (tanpa API key, `test` key = 1).
-3. **Seed lokal** — katalog asli internasional (`seed_data.py`), selalu tersedia
-   dan offline.
-4. **AI fallback** — hanya jika tiga sumber di atas menghasilkan < 1 hasil;
-   respons ditandai `fallback: true` + peringatan di UI.
-
-**Pencocokan bahan deterministic:**
-- Normalisasi multilingual (`ingredients.py`): `bawang putih` → `garlic`,
-  `daging sapi` → `beef`, dst.
-- Skor = proporsi bahan yang cocok; resep diurutkan berdasar skor + jumlah bahan
-  kurang. Tidak pernah menampilkan resep acak yang tak berhubungan.
-
-**Endpoint baru:**
-```bash
-# Cocokkan bahan (manual/scan) ke resep
 curl -X POST http://localhost:8787/api/recipes/match \
-  -H "Content-Type: application/json" \
-  -d '{"ingredients":["telur","nasi","bawang putih"],
-       "preferences":{"cuisine":"indonesian","diet":"vegetarian","maxTimeMinutes":30}}'
+  -H 'Content-Type: application/json' \
+  -d '{"ingredients":["telur","nasi","bawang putih"],"preferences":{"cuisine":"indonesian","maxTimeMinutes":30}}'
 
-# Normalisasi nama bahan
-curl -X POST http://localhost:8787/api/ingredients/normalize \
-  -H "Content-Type: application/json" \
-  -d '{"ingredients":["Bawang Putih","daging sapi"]}'
-
-# Cari resep by id
-curl http://localhost:8787/api/recipes/seed-indonesian-nasi-goreng
+curl -X POST http://localhost:8787/api/scan-resep \
+  -F 'image=@bahan.jpg' -F 'allowFallback=false'
 ```
 
-### Setup Supabase (opsional)
+**Kontrak upload Python:** maksimal 5 gambar, 4 MiB per gambar, 12 MiB total, dimensi maksimal 4096 × 4096 dan 16.000.000 piksel terdekode. Validasi backend tetap berlaku meskipun browser telah menerima file. Foto kamera beserta crop juga harus memenuhi batas ini.
 
-1. Buat project di https://supabase.com, ambil **anon** key (bukan service_role).
-2. Jalankan `supabase_schema.sql` di SQL Editor (buat tabel + RLS + seed).
-3. Isi `SUPABASE_URL` dan `SUPABASE_ANON_KEY` di `.env`.
-4. Restart server. Tanpa Supabase, discovery tetap jalan via TheMealDB + seed lokal.
+**Kegagalan umum:** `400` input/gambar tidak valid (termasuk beberapa pelanggaran batas upload), `413` ukuran/dimensi terlalu besar, `429` rate limit dengan `retryAfterSeconds`, `502` kegagalan provider, `503` key belum tersedia/Pillow tidak tersedia/server sibuk, dan `504` timeout. Baca field `error`, jangan hanya kode HTTP.
 
-> ⚠️ **Isolasi scraping legacy:** `recipe_sources.py` memuat adapter scraping
-> (Cookpad/Allrecipes/detik) untuk fitur lama. Modul discovery baru
-> (`recipe_discovery.py`) **tidak** memakai scraping — hanya endpoint resmi
-> (TheMealDB API + Supabase REST). Batasi pemakaian scraping legacy sesuai ToS
-> sumber.
+`/health` dan `/ready` mengembalikan **503 ketika tidak ada key AI**, meskipun frontend dan manual matching masih bisa dipakai. Status 200 menandakan ada key terkonfigurasi, bukan bukti bahwa autentikasi provider berhasil atau model tersedia.
 
-### Known limitations
+## 📁 Peta repositori
 
-- **TheMealDB stores metadata only.** TheMealDB's Terms of Use do not grant
-  redistribution of recipe instruction prose or images, so the adapter stores
-  only factual metadata (title, area, ingredient list, source link) and always
-  links back to the original page. Full instructions and images are fetched
-  live by the user on the source site — never copied or shipped.
-- **Allergen tags are derived, not authoritative.** Allergens are inferred
-  deterministically from the actual ingredient names (never from an LLM), with
-  explicit false-positive suppression (e.g. "coconut milk" is not dairy,
-  "peanut butter" is not dairy butter). The exclusion filter is **fail-closed**:
-  a recipe with a positively-identified matching allergen is removed, AND a
-  recipe with no ingredient data at all (unknown allergen metadata) is also
-  removed when an exclusion is active — it is never silently passed as "safe".
-  Always verify allergens before cooking.
-- **`total_minutes` is derived** from `prep_minutes + cook_minutes` when a
-  source omits it; a recipe with no time info leaves it `None` (treated as
-  "unknown" by the time filter, never as 0).
-- **AI fallback is unverified.** When deterministic sources yield nothing, the
-  AI path is used and every result is labeled `verified: false` with a warning.
-- **Nutrition (USDA) is estimate-only** and disabled by default
-  (`ENABLE_NUTRITION_LOOKUP=false`); it is not a recipe source.
+Berkas runtime tetap berada di root; tidak perlu memindahkan sumber untuk menjalankan aplikasi.
 
-## ⚠️ Production / Deployment Caution
+```text
+.
+├── README.md                     # Panduan utama
+├── resep-in-aja.html              # UI, CSS, dan JavaScript dalam satu berkas
+├── server.py                      # HTTP server, proxy vision, routing, dan enrichment
+├── ingredients.py                 # Normalisasi bahan dan alias
+├── recipe_discovery.py            # Adapter katalog dan pencocokan deterministik
+├── seed_data.py                   # Katalog resep seed
+├── recipe_sources.py              # Sumber resep/galeri dan adapter legacy
+├── supabase_client.py             # Adapter REST Supabase
+├── supabase_schema.sql            # Tabel, RLS, dan seed Supabase
+├── key_store.py                   # CLI key store Windows DPAPI
+├── console_ui.py                  # Dashboard terminal Windows
+├── requirements.txt              # Dependensi runtime Python
+├── .env.example                   # Template konfigurasi; tinjau model lama
+├── start.bat / start.sh            # Launcher yang memuat .env
+├── render.yaml                    # Blueprint deployment Python
+├── test_*.py                      # Pengujian backend
+├── test_frontend*.js / *.cjs       # Harness UI dan regresi browser
+└── cloudflare/
+    ├── README.md                  # Panduan runtime/deploy Workers
+    ├── package.json               # Script dev, test, deploy
+    ├── wrangler.jsonc             # Konfigurasi Workers dan assets
+    ├── src/                       # Implementasi backend JavaScript
+    └── test/                      # Pengujian Workers
+```
 
-Server ini adalah **purwarupa hackathon**, bukan produk siap produksi. Sebelum
-mengeksposnya ke internet (mis. `HOST=0.0.0.0` di belakang proxy), perhatikan
-hal-hal berikut yang **belum** terselesaikan:
+## 🧪 Pengujian
 
-- **Tidak ada autentikasi / autorisasi.** Endpoint `/api/scan-resep` (yang
-  mengonsumsi kuota AI berbayar) terbuka untuk siapa pun yang bisa mencapai
-  port. Rate limit per-IP dan `ALLOWED_HOSTS`/`ALLOWED_ORIGINS` memitigasi
-  sebagian, tetapi **bukan** pengganti login/API-key per pengguna.
-- **Fallback privasi bersifat opt-in**, tapi begitu diaktifkan, foto pengguna
-  dikirim ke semua provider dalam chain — pastikan ini sesuai kebijakan privasi
-  dan regulasi (mis. UU PDP) Anda.
-- **Penyimpanan key DPAPI hanya untuk Windows.** Di hosting Linux (Render dsb.)
-  gunakan environment secrets; file `.api-keys.enc.json` tidak bisa didekripsi
-  lintas mesin/akun.
-- **`ThreadingHTTPServer` tanpa batas thread.** Python `ThreadingHTTPServer`
-  membuat satu thread per koneksi; tidak ada hard cap global. Mitigasi utama
-  adalah semaphore `MAX_CONCURRENT_SCANS` (scan AI) + rate limiter, tetapi
-  koneksi lambat/keep-alive tetap bisa menahan thread. Untuk beban produksi
-  pakai reverse proxy (nginx/caddy) + WSGI/ASGI server yang membatasi worker.
-- **Timeouts provider relatif singkat** (25 dtk) dan deadline total scan 120 dtk
-  — cocok untuk demo, tapi perlu tuning untuk beban nyata.
+Dari root, dengan virtualenv aktif:
 
-> **Rekomendasi:** untuk produksi, tambahkan lapisan autentikasi, isolasi key
-> per pengguna, dan jalankan di belakang reverse proxy dengan batas koneksi.
+```bash
+python -m unittest discover -p 'test_*.py'
+node test_frontend.js
+node test_frontend_manual_match.js
+node test_frontend_inspiration.js
+```
 
-## 🔁 Migrasi dari versi lama
+Harness Node memakai stub DOM; kelulusan tidak menggantikan pengujian kamera di browser atau panggilan provider nyata. Suite backend mencakup discovery, rekomendasi, regresi, adapter provider, dan keamanan. Nama “integration” tidak otomatis berarti menggunakan key/provider live; periksa fixture/mock dalam pengujian.
 
-- **Batas upload diseragamkan ke 4 MB/foto, 12 MB total, 16 juta piksel**
-  (sebelumnya backend memakai 8 MB/20 MB). Frontend dan backend kini sejajar.
-  Foto yang lolos batas lama (8–20 MB) kini ditolak — resize/kompresi foto Anda
-  terlebih dahulu.
-- **Fallback antar provider kini nonaktif secara default.** Jika Anda sebelumnya
-  mengandalkan auto-fallback, set `ALLOW_CROSS_PROVIDER_FALLBACK=true` di `.env`
-  (atau biarkan frontend meng-opt-in per request).
-- **Pillow kini wajib** untuk scan foto: `python3 -m pip install -r requirements.txt`.
-  Tanpa Pillow, scan foto mengembalikan HTTP 503 (discovery resep non-foto tetap jalan).
+Untuk Workers, Node.js dan npm diperlukan:
 
-## 📝 Lisensi
+```bash
+cd cloudflare
+npm ci
+npm test
+```
 
-MIT — bebas pakai untuk hackathon, demo, atau pengembangan lanjutan.
+Regresi browser tambahan memakai Playwright dan Chromium, server lokal yang berjalan, serta lingkungan dengan tampilan grafis (`headless:false`):
+
+```bash
+# Playwright harus tersedia pada resolusi modul Node, berikut browser Chromium.
+node test_frontend_browser.cjs
+```
+
+`BASE_URL` dapat mengubah URL target; `PLAYWRIGHT_MODULE` dapat menunjuk path modul Playwright. Dependensi browser tidak termasuk `requirements.txt`. Pengujian browser memakai respons yang diintersep sebagai fixture, bukan bukti hasil AI live. README ini tidak menyatakan seluruh suite sudah lulus pada semua OS.
+
+## ☁️ Deployment
+
+- **Cloudflare Workers:** ikuti [`cloudflare/README.md`](cloudflare/README.md). Backend JavaScript dan assets dikonfigurasi lewat [`wrangler.jsonc`](cloudflare/wrangler.jsonc); frontend perlu disalin menjadi `cloudflare/public/index.html`. **Jangan jadikan root repositori sebagai direktori assets**, karena dapat berisi key dan `.env`. Gunakan secret hosting, bukan key di HTML/konfigurasi publik.
+- **Render / Python:** gunakan [`render.yaml`](render.yaml) sebagai blueprint awal. Build memasang `requirements.txt`, start menjalankan `python server.py`, bind `0.0.0.0`, dan health check memakai `/health`. Tanpa key AI, health check tersebut akan menerima 503.
+- **Hosting sendiri:** simpan root runtime apa adanya, pasang dependensi, set environment, dan letakkan server di belakang HTTPS reverse proxy dengan batas koneksi serta kontrol akses.
+
+> **Production / Deployment Caution:** endpoint scan menggunakan kuota/key server dan belum memiliki autentikasi atau isolasi key per pengguna. Rate limit, slot thread, validasi host/origin, dan security headers bukan pengganti login serta pembatasan penggunaan. Jangan membuka deployment publik berbayar tanpa lapisan kontrol akses.
+
+**Perbedaan runtime yang penting:** Python memakai Pillow untuk decode dan re-encode gambar; jangan mengasumsikan validasi Workers setara. Worker memiliki implementasi provider/config sendiri: `wrangler.jsonc` saat ini menetapkan `GEMINI_MODEL=gemini-3.5-flash-lite`, berbeda dari default Python. Worker `/api/viral` memakai feed detikFood bertanggal, sedangkan Python mengembalikan daftar statis. Periksa panduan Workers untuk batasan lengkap; label “Terbaru” di UI tidak menjamin berita real-time pada Python.
+
+## 🛠️ Troubleshooting
+
+| Gejala | Periksa / tindakan |
+| --- | --- |
+| Halaman terbuka tetapi API gagal | Akses melalui `http://localhost:8787`, bukan `file://`; pastikan server tetap berjalan |
+| “Belum ada API key” / health 503 | Isi key backend, jalankan launcher yang memuat `.env`, lalu restart; `python server.py` tidak membaca `.env` |
+| Key sudah diisi tetapi model gagal | Cek `/health` untuk model aktif; hapus/perbarui model lama dari `.env.example`, cek akses vision, kuota dan log server tanpa membagikan key |
+| Scan ditolak karena Pillow | Jalankan `python -m pip install -r requirements.txt` pada interpreter/virtualenv server yang sama |
+| Kamera tidak terbuka | Izinkan kamera; gunakan localhost/HTTPS, tutup aplikasi yang mengunci kamera, atau gunakan unggah foto |
+| Foto terlalu besar | Resize/kompresi sebelum unggah; periksa jumlah gambar, ukuran total, dimensi, dan crop otomatis kamera |
+| HTTP 429 / server sibuk | Tunggu sesuai `retryAfterSeconds` bila ada; jangan spam retry. Periksa batas scan lokal dan kuota provider secara terpisah |
+| Provider gagal tanpa berpindah | Ini default privasi; frontend mengirim `allowFallback=false`. Jangan mengaktifkan fallback tanpa persetujuan pengiriman ke provider lain |
+| Manual matching kosong | Tambah bahan nyata yang tersedia, longgarkan filter, atau tinjau ambang `RECIPE_MATCH_MIN_SCORE`; tidak semua kombinasi memiliki resep cocok |
+| Galeri kosong / sumber lambat | Sumber eksternal dapat gagal atau berubah; coba kata kunci lain. Seed manual tidak berarti seluruh galeri tersedia offline |
+| Port 8787 terpakai | Ubah `PORT` pada `.env` lalu jalankan ulang launcher; buka port baru secara manual |
+| Key lokal tidak terbaca di hosting | DPAPI terikat akun Windows; gunakan environment secrets pada host tujuan |
+
+## ⚠️ Batasan & penggunaan bertanggung jawab
+
+- AI dapat salah mengenali bahan, waktu, porsi, dan langkah. Aplikasi tidak dapat memastikan kesegaran, kematangan, atau keamanan konsumsi dari foto.
+- Filter diet dan inferensi alergen bergantung pada metadata/bahan. Jangan menganggap hasil sebagai jaminan bebas alergen; verifikasi label bahan dan resep asli. UI manual belum menawarkan kontrol alergen meskipun backend menerima `excludeAllergens`.
+- Katalog tidak mencakup seluruh resep; skor bahan mengabaikan banyak konteks dapur. Metadata waktu yang tidak tersedia dapat menyebabkan resep tersaring saat filter waktu aktif.
+- Teks peringatan/nama field fallback sebagian masih menyebut AI meskipun implementasi fallback manual Python saat ini memakai kartu eksternal. Perbedaan ini dijelaskan agar integrator tidak membuat klaim generasi yang keliru.
+- TheMealDB pada adapter discovery diperlakukan sebagai metadata dan tautan sumber; jalur galeri/legacy memiliki perilaku berbeda. Jangan menyimpulkan izin redistribusi teks/gambar hanya dari kemampuan API mengembalikannya. Hormati ketentuan dan atribusi tiap sumber, termasuk adapter scraping.
+- Tidak ada jaminan uptime, latensi, ketersediaan provider, harga, atau kuota. Konfigurasi model dapat usang; operator perlu memvalidasinya.
+- Tidak ada klaim lisensi proyek di README ini. Pastikan status izin penggunaan sebelum mendistribusikan ulang kode atau konten pihak ketiga.
 
 ---
 
-Dibuat untuk hackathon Sustainability. 🌱
+**Mulai dari yang ada, periksa hasilnya, lalu masak dengan aman.** 🌱

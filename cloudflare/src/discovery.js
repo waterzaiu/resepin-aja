@@ -243,8 +243,38 @@ export async function runDiscovery(ingredients, preferences, externalProvider = 
     }
   }
 
+  // Metadata-only gallery cards cannot substantiate dietary/allergen/time
+  // claims, so fail closed for every active preference, as fallback does.
+  let external_results = [];
+  if (!hasFilters && typeof externalProvider?.references === 'function') {
+    try {
+      const cards = await externalProvider.references(ingredients);
+      const matchedUrls = new Set(matches.map((recipe) => recipe.source_url));
+      const seen = new Set();
+      external_results = (cards || []).filter((card) => {
+        if (!card.nama || !card.url || matchedUrls.has(card.url) || seen.has(card.url)) return false;
+        seen.add(card.url);
+        return true;
+      }).slice(0, 12).map((card) => ({
+        title: card.nama,
+        image_url: card.thumbnail || '',
+        source_url: card.url,
+        source_type: 'external',
+        source_name: card.source,
+        verified: false,
+        match_type: 'external_reference',
+        matchExplanation: 'Referensi berdasarkan judul; kecocokan bahan lengkap belum diverifikasi. Periksa resep asli sebelum memasak.',
+        attribution_text: `Referensi resep dari ${card.source}; buka sumber asli untuk bahan dan petunjuk lengkap.`,
+      }));
+    } catch { /* Optional gallery sources must not break deterministic matching. */ }
+  }
+
   return {
     recipes: matches.slice(0, 10),
+    external_results,
+    external_warning: external_results.length
+      ? 'Referensi eksternal berdasarkan judul, bukan skor kecocokan bahan. Bahan lengkap belum diverifikasi; periksa sumber asli.'
+      : null,
     source: matches.length ? 'deterministic' : 'ai_fallback',
     // Legacy source/ai_results names retained until the frontend migrates.
     actual_source: matches.length ? 'deterministic' : (ai_results.length ? 'external_fallback' : 'no_matches'),

@@ -327,10 +327,12 @@ async function scan(request, env, fetchFn) {
 
     const crossFallback = env.ALLOW_CROSS_PROVIDER_FALLBACK === 'true';
     let providerUsed;
+    let modelUsed;
     let recipe;
     try {
       const res = await callVisionWithFallback(dataUrls, chain, fetchFn, crossFallback || allowFallback);
       providerUsed = res.provider;
+      modelUsed = res.model;
       recipe = res.recipe;
     } catch (e) {
       if (e instanceof ProviderError) {
@@ -360,7 +362,7 @@ async function scan(request, env, fetchFn) {
     return jsonResponse({
       recipe,
       provider: providerUsed,
-      model: chain.find((p) => p.name === providerUsed)?.model || '',
+      model: modelUsed,
     });
   } catch (e) {
     console.error('scan error:', e && e.constructor && e.constructor.name);
@@ -373,7 +375,10 @@ function buildProviderChain(env) {
   for (const name of PROVIDER_ORDER) {
     const key = env[`${name.toUpperCase()}_API_KEY`];
     if (key) {
-      chain.push({ name, apiKey: key, model: providerModel(name, env) });
+      const models = name === 'gemini'
+        ? [providerModel(name, env), 'gemini-3.1-flash-lite', 'gemini-2.5-flash']
+        : [providerModel(name, env)];
+      for (const model of new Set(models)) chain.push({ name, apiKey: key, model });
     }
   }
   return chain;

@@ -261,10 +261,10 @@ export async function callProvider(name, dataUrls, model, apiKey, fetchFn) {
     throw new ProviderError(`Provider ${name} sibuk (${resp.status}).`, true, 502);
   }
   if (resp.status !== 200) {
-    // Non-retryable: a bad request (400) or auth (401/403) will not succeed on
-    // retry against a different provider with a different key, but the request
-    // itself is malformed/unauthorized — do not replay across providers.
-    throw new ProviderError(`Provider ${name} error (${resp.status}).`, false, resp.status === 400 ? 400 : 502);
+    // Upstream model/request incompatibility can be model-specific. Local
+    // image validation happens before fetch and remains fatal; auth stays fatal.
+    const retryable = resp.status === 400 || resp.status === 404;
+    throw new ProviderError(`Provider ${name} model ${model} error (${resp.status}).`, retryable, 502);
   }
   let data;
   try {
@@ -278,7 +278,10 @@ export async function callProvider(name, dataUrls, model, apiKey, fetchFn) {
   } catch {
     throw new ProviderError('Response provider tidak sesuai format.', true, 502);
   }
-  const parsed = parseRecipe(text);
+  let parsed;
+  try { parsed = parseRecipe(text); } catch {
+    throw new ProviderError('Jawaban AI kosong atau bukan JSON yang valid.', true, 502);
+  }
   const recipe = validateRecipe(parsed);
   if (!recipe) throw new ProviderError('Resep dari AI tidak lolos validasi skema.', true, 502);
   return recipe;
@@ -287,18 +290,15 @@ export async function callProvider(name, dataUrls, model, apiKey, fetchFn) {
 // Provider chain: try providers in order until one returns a valid recipe.
 export async function callVisionWithFallback(dataUrls, config, fetchFn, allowFallback = null) {
   // config: [{ name, apiKey, model }, ...] in preference order.
-  const chain = [...config];
+  // Without consent, only the initially selected vendor may receive images.
+  const chain = config.filter(p => allowFallback === true || p.name === config[0]?.name);
   for (const p of chain) {
     try {
       const recipe = await callProvider(p.name, dataUrls, p.model, p.apiKey, fetchFn);
       return { provider: p.name, model: p.model, recipe };
     } catch (e) {
       if (e instanceof ProviderError && !e.retryable) throw e; // bad image/request: stop
-      if (!allowFallback && chain.length > 1) {
-        // Cross-provider fallback is opt-in (privacy). Without opt-in, stop at
-        // the first configured provider's failure.
-        throw e;
-      }
+      if (p === chain[chain.length - 1]) throw e;
       // else continue to next provider
     }
   }
